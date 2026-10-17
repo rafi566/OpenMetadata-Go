@@ -66,6 +66,12 @@ compilation away from the original physical targets covered by admission.
 Preserve present malformed metadata in copies for canonical-metaschema rejection
 at original source pointers; contextual normalization must not silently repair
 invalid fields or replace ordinary invalidity with unsupported-semantics blockers.
+Reject nonstring dialect declarations through the pinned canonical metaschema
+before sibling evaluation can select a different arithmetic domain. This early
+check sees only the original declaration within the existing admitted metaschema
+scope and uses its collected fallback draft; native errors retain original source
+attribution. It must not compile whole unadmitted source documents or inspect
+unrelated annotation containers.
 
 `LoadEmbeddedRegistry(source fs.FS, profile string) (*Registry, error)` consumes
 the same bounded loader/index/resolver as disk loading. Empty profile uses the

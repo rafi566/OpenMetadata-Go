@@ -1,7 +1,7 @@
 # Go schema reconstruction preserves source identities and exact values
 
 - **Status:** Accepted
-- **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces) · v2 2026-10-17 (source-bound registry and dependency arithmetic admission) · v3 2026-10-17 (selected schema admission and collector identities) · v4 2026-10-17 (independent resource base preservation) · v5 2026-10-17 (metadata validity preservation)
+- **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces) · v2 2026-10-17 (source-bound registry and dependency arithmetic admission) · v3 2026-10-17 (selected schema admission and collector identities) · v4 2026-10-17 (independent resource base preservation) · v5 2026-10-17 (metadata validity preservation) · v6 2026-10-17 (canonical dialect rejection before sibling arithmetic)
 - **Deciders:** Migration controller, applying the user's approved full migration and authorized reconstruction
 - **Guard:** Reviewer; focused behavior tests and independent compilation required by the reconstruction plan
 - **Related:** [reconstructed specification](../superpowers/specs/2026-10-17-go-schema-model-reconstruction-design.md); [implementation plan](../superpowers/plans/2026-10-17-go-backend-reconstruction.md)
@@ -124,6 +124,18 @@ Present malformed `$schema` or `$id` types stay in independent copies for the
 pinned canonical metaschema to reject at their original source locations.
 Projection must not repair invalid metadata or turn ordinary invalidity into
 unsupported-semantics blockers; no separate canonical validator is introduced.
+
+Nonstring `$schema` in a detached resource would select the compiler's default
+draft instead of its inherited draft. Within the existing metaschema admission
+scope, reject this metadata before compiling any source siblings: submit only
+the original `$schema` value to the pinned compiler's canonical metaschema with
+the collected fallback draft. Its string-type check returns before arithmetic
+or traversal of the malformed value. Preserve the native canonical error and
+attribute it to the original physical source pointer. This does not duplicate
+canonical validation rules, compile unadmitted original documents, or scan
+unknown annotation containers. Ordinary invalid metadata is still invalid,
+not unsupported arithmetic; valid and absent declarations keep their existing
+scope. Early rejection never contributes a successful requested Compile count.
 
 A Check-local document-closure cache is bounded by admitted documents (at most
 10,000) and discarded. Check continues independent nodes and counts only actual

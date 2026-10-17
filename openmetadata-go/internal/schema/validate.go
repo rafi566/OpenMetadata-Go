@@ -104,6 +104,34 @@ func projectMetadataString(object map[string]any, keyword, replacement string) {
 	object[keyword] = replacement
 }
 
+// A detached nonstring declaration selects the compiler's default draft rather
+// than its collected scope. Reject it canonically before any sibling arithmetic.
+// The only source value compiled here is $schema: every supported metaschema
+// rejects its nonstring type before traversing or performing arithmetic on it.
+func (r *Registry) rejectMalformedDialect(n *entry, fallback string, declaration any) error {
+	c := jsonschema.NewCompiler()
+	switch {
+	case strings.Contains(fallback, "draft-07"):
+		c.DefaultDraft(jsonschema.Draft7)
+	case strings.Contains(fallback, "2019-09"):
+		c.DefaultDraft(jsonschema.Draft2019)
+	default:
+		c.DefaultDraft(jsonschema.Draft2020)
+	}
+	if err := c.AddResource(n.physical, map[string]any{"$schema": declaration}); err != nil {
+		return diagnostic("compile", n.Path, n.Pointer, err)
+	}
+	_, err := c.Compile(n.physical)
+	if err == nil {
+		return diagnostic("compile", n.Path, n.Pointer+"/$schema", errors.New("canonical metaschema unexpectedly accepted nonstring $schema"))
+	}
+	var meta *jsonschema.SchemaValidationError
+	if errors.As(err, &meta) {
+		err = &jsonschema.SchemaValidationError{URL: n.physical + fragment(n.Pointer), Err: meta.Err}
+	}
+	return joinDiagnostics(r.compileDiagnostics(n, err))
+}
+
 func setValue(v any, pointer string, value any) {
 	parts := splitPointer(pointer)
 	for _, part := range parts[:len(parts)-1] {
