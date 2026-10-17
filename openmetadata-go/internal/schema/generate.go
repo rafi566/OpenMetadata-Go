@@ -169,7 +169,13 @@ func filenameFold(name string) string {
 // Keep this preflight aligned with that selected toolchain without renaming or
 // dropping raw sources, or importing cmd/go's private implementation.
 func embeddedSourcePath(path string) error {
-	for _, name := range strings.Split(path, "/") {
+	components := strings.Split(path, "/")
+	for i, name := range components {
+		// Go's embedding walk treats any child named go.mod as a module
+		// boundary, including a directory, and can skip the parent's subtree.
+		if i < len(components)-1 && name == "go.mod" {
+			return fmt.Errorf("%w: source directory %q creates a Go embedding module boundary", ErrBlocked, name)
+		}
 		if err := embeddedSourceComponent(name); err != nil {
 			return fmt.Errorf("%w: source component %q cannot be embedded: %v", ErrBlocked, name, err)
 		}

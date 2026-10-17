@@ -195,10 +195,12 @@ func TestGeneratedEmbeddingPreservesSupportedPaths(t *testing.T) {
 	const original = "目录/状态#%.json"
 	const raw = "{\n  \"type\":\"object\",\"properties\":{\"payload\":{\"type\":\"string\"}}\n}\n"
 	docs := map[string]string{
-		original:                     raw,
-		"alias.json":                 `{"$ref":"目录/状态%23%25.json"}`,
-		".hidden/_nested/value.json": `{ "type": "boolean" }`,
-		"short~1.json":               `{}`,
+		original:                          raw,
+		"alias.json":                      `{"$ref":"目录/状态%23%25.json"}`,
+		".hidden/_nested/value.json":      `{ "type": "boolean" }`,
+		"short~1.json":                    `{}`,
+		"go.mod.json":                     `{ "type": "string" }`,
+		"neighbor/go.mod.json/value.json": `{ "type": "integer" }`,
 	}
 	var expected strings.Builder
 	for _, path := range sortedKeys(docs) {
@@ -207,10 +209,12 @@ func TestGeneratedEmbeddingPreservesSupportedPaths(t *testing.T) {
 	independentGeneratedModule(t, docs, "models", fmt.Sprintf(`
 import("testing";"net/url")
 func TestEmbedding(t *testing.T){
+r,e:=modelRegistry();if e!=nil{t.Fatal(e)}
 for path,want:=range map[string]string{%s}{
 raw,e:=modelSchemas.ReadFile("registry/"+path);if e!=nil||string(raw)!=want{t.Fatalf("embedded raw source changed %%q: %%q %%v",path,raw,e)}
+id:=(&url.URL{Scheme:"file",Path:"/__openmetadata_embedded__/"+path}).String()
+node,e:=r.Resolve(id,"");if e!=nil||node.Path!=path||node.Pointer!=""||node.ID!=id||string(node.Document)!=want{t.Fatalf("embedded source identity changed %%q: %%+v %%v",path,node,e)}
 }
-r,e:=modelRegistry();if e!=nil{t.Fatal(e)}
 target,e:=r.Resolve("file:///__openmetadata_embedded__/alias.json","目录/状态%%23%%25.json");if e!=nil{t.Fatal(e)}
 wantID:=(&url.URL{Scheme:"file",Path:"/__openmetadata_embedded__/"+%q}).String()
 if target.Path!=%q||target.Pointer!=""||target.ID!=wantID||string(target.Document)!=%q{t.Fatalf("source identity changed: %%+v",target)}
@@ -220,4 +224,21 @@ view,ok,e:=alias.Object();if e!=nil||!ok{t.Fatal(e)};child,ok:=view.Payload.Valu
 if e:=alias.UnmarshalJSON([]byte("{\"payload\":42}"));e==nil{t.Fatal("referenced constraint lost")}
 }
 `, expected.String(), original, original, raw))
+}
+
+func TestGenerateEmbeddingModuleBoundaries(t *testing.T) {
+	for _, path := range []string{"go.mod/value.json", "nested/go.mod/value.json"} {
+		t.Run(path, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out")
+			docs := map[string]string{path: `{}`, "visible.json": `{"type":"string"}`}
+			_, err := Generate(generationRegistry(t, docs), GenerateOptions{"models", out})
+			var diagnostic *Diagnostic
+			if !errors.Is(err, ErrBlocked) || !errors.As(err, &diagnostic) || diagnostic.Path != path || diagnostic.Pointer != "" || diagnostic.Stage != "generate" || !strings.Contains(err.Error(), "go.mod") {
+				t.Fatalf("missing attributed module-boundary blocker: %v", err)
+			}
+			if _, err := os.Stat(out); !os.IsNotExist(err) {
+				t.Fatal("module-boundary preflight wrote output")
+			}
+		})
+	}
 }
