@@ -21,6 +21,7 @@ func TestCompositionViews(t *testing.T) {
 		"choice.json":  `{"oneOf":[{"type":"number"},{"type":"integer"},{"type":"string"}]}`,
 		"overlap.json": `{"anyOf":[{"type":"object","required":["a"],"properties":{"a":{"type":"integer"}}},{"type":"object","required":["b"],"properties":{"b":{"type":"string"}}}]}`,
 		"both.json":    `{"allOf":[{"type":"integer","minimum":2},{"maximum":4}]}`,
+		"errors.json":  `{"badSchema":{"type":1},"badPattern":{"pattern":"(?=a)"},"badNumeric":{"minimum":1e10001}}`,
 	}, "models", `
 import("testing";"errors"; support "github.com/rafi566/OpenMetadata-Go/openmetadata-go/internal/schema")
 func TestBranches(t *testing.T){
@@ -46,6 +47,7 @@ if _,ok,e:=both.AsAllOf0();e!=nil||!ok{t.Fatal(e)};if _,ok,e:=both.AsAllOf1();e!
 value,_:=support.ParseValue([]byte("1e10001"));if _,ok,e:=modelBranch("file:///__openmetadata_embedded__/both.json#/allOf/0",value);!errors.Is(e,support.ErrBlocked)||ok{t.Fatal("numeric blocker swallowed",e)}
 value,_=support.ParseValue([]byte("3"));if _,ok,e:=modelBranch("file:///__openmetadata_embedded__/missing.json",value);e==nil||ok{t.Fatal("load failure swallowed",e)}
 if _,ok,e:=modelBranch("file:///__openmetadata_embedded__/both.json",support.Value{});e==nil||ok{t.Fatal("unset swallowed",e)}
+for _,pointer:=range []string{"badSchema","badPattern","badNumeric"}{_,ok,e:=modelBranch("file:///__openmetadata_embedded__/errors.json#/"+pointer,value);if e==nil||ok{t.Fatal("schema failure swallowed",pointer,e)};if pointer!="badSchema"&&!errors.Is(e,support.ErrBlocked){t.Fatal("blocker classification changed",pointer,e)}}
 }
 `)
 }

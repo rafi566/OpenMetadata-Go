@@ -294,7 +294,7 @@ func (g *modelGenerator) supported(n *entry) error {
 	dialect := g.registry.inheritedDialect(n)
 	modern := !strings.Contains(dialect, "draft-07")
 	latest := modern && !strings.Contains(dialect, "2019-09")
-	for _, k := range []string{"patternProperties", "$dynamicRef", "$recursiveRef"} {
+	for _, k := range []string{"$dynamicRef", "$recursiveRef"} {
 		if (k == "$dynamicRef" && !latest) || (k == "$recursiveRef" && (!modern || latest)) {
 			continue
 		}
@@ -302,7 +302,8 @@ func (g *modelGenerator) supported(n *entry) error {
 			return diagnostic("generate", n.Path, n.Pointer+"/"+escape(k), fmt.Errorf("%w: %s projection is unsupported", ErrBlocked, k))
 		}
 	}
-	return nil
+	_, err := g.mapPatterns(n)
+	return err
 }
 func (g *modelGenerator) shape(n *entry) (*entry, error) {
 	seen := map[string]bool{}
@@ -408,8 +409,19 @@ func(v %s) JSONValue() support.Value{return v.value}
 		if hasMap {
 			child := g.names[keyAt(shape.Path, shape.Pointer+"/additionalProperties")]
 			if child != "" && m["additionalProperties"] != false {
+				patterns, err := g.mapPatterns(shape)
+				if err != nil {
+					return nil, err
+				}
 				fmt.Fprintln(&body, "// AdditionalProperties returns detached checked values for additional keys; false means a nonobject, and an empty object yields a nonnil empty map.")
-				fmt.Fprintf(&body, "func(v %s) AdditionalProperties()(map[string]*%s,bool,error){if e:=v.Validate();e!=nil{return nil,false,e};values,ok:=v.value.Object();if !ok{return nil,false,nil};out:=make(map[string]*%s);for key,raw:=range values{\n", name, child, child)
+				fmt.Fprintf(&body, "func(v %s) AdditionalProperties()(map[string]*%s,bool,error){if e:=v.Validate();e!=nil{return nil,false,e};values,ok:=v.value.Object();if !ok{return nil,false,nil};out:=make(map[string]*%s)\n", name, child, child)
+				if len(patterns) > 0 {
+					imports["regexp"] = "regexp"
+				}
+				for i, pattern := range patterns {
+					fmt.Fprintf(&body, "pattern%d,e:=regexp.Compile(%q);if e!=nil{return nil,false,e}\n", i, pattern)
+				}
+				fmt.Fprintln(&body, "for key,raw:=range values{")
 				if len(props) > 0 {
 					fmt.Fprint(&body, "switch key{case ")
 					for i, key := range sortedKeys(props) {
@@ -419,6 +431,9 @@ func(v %s) JSONValue() support.Value{return v.value}
 						fmt.Fprintf(&body, "%q", key)
 					}
 					fmt.Fprint(&body, ":continue}\n")
+				}
+				for i := range patterns {
+					fmt.Fprintf(&body, "if pattern%d.MatchString(key){continue}\n", i)
 				}
 				fmt.Fprintf(&body, "var child %s;if e:=child.UnmarshalJSON(raw.RawJSON());e!=nil{return nil,false,e};out[key]=&child};return out,true,nil}\n", child)
 			}

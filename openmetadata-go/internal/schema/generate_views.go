@@ -2,7 +2,10 @@
 
 package schema
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // A modern reference does not replace its siblings. Project a local shape when
 // present, leaving the original wrapper's validation to enforce both schemas.
@@ -39,4 +42,32 @@ func hasTuplePrefix(m map[string]any, dialect string) bool {
 	}
 	prefix, _ := m["prefixItems"].([]any)
 	return len(prefix) > 0
+}
+
+func (g *modelGenerator) mapPatterns(n *entry) ([]string, error) {
+	m, _ := n.value.(map[string]any)
+	patterns, _ := m["patternProperties"].(map[string]any)
+	keys := sortedKeys(patterns)
+	for _, pattern := range keys {
+		pointer := n.Pointer + "/patternProperties/" + escape(pattern)
+		// The emitted matcher uses the admitted generic engine without rewriting
+		// patterns. A source-bound Java engine needs its own exact projection;
+		// neither a matching spelling nor Go compilation establishes equivalence.
+		legacy := g.registry.patternEligible(n, pointer, pattern)
+		if g.registry.legacy {
+			for _, source := range g.registry.schemas {
+				schema, _ := source.value.(map[string]any)
+				if schema["pattern"] == pattern && g.registry.patternEligible(source, source.Pointer+"/pattern", pattern) {
+					legacy = true
+				}
+			}
+		}
+		if legacy {
+			return nil, diagnostic("generate", n.Path, pointer, fmt.Errorf("%w: source-bound pattern classification is unsupported", ErrBlocked))
+		}
+		if _, err := genericRegexp(pattern); err != nil {
+			return nil, diagnostic("generate", n.Path, pointer, err)
+		}
+	}
+	return keys, nil
 }
