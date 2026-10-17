@@ -60,6 +60,9 @@ Explicit raw-pointer selection remains supported: admit the selected schema,
 effective descendants and newly reached local reference closure in an immutable,
 bounded request-local view. Reuse source bytes without changing the loaded graph
 or identities; a document-only cache hit cannot admit a different selected target.
+An independently retrieved resource copy, including a root alias, preserves its
+collected absolute base and effective draft, with draft-correct ID semantics. Relative IDs must not move
+compilation away from the original physical targets covered by admission.
 
 `LoadEmbeddedRegistry(source fs.FS, profile string) (*Registry, error)` consumes
 the same bounded loader/index/resolver as disk loading. Empty profile uses the

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -69,22 +70,24 @@ func (r *Registry) compiler() (*jsonschema.Compiler, error) {
 	}
 	if !r.legacy {
 		for id, loc := range r.identities {
-			if loc.pointer == "" {
-				documents[id] = documents[r.documents[loc.path].physical]
-			} else {
-				// A scoped resource is locally retrievable by its own identity.
-				// Preserve its inherited dialect when loaded independently.
-				n := r.entries[keyAt(loc.path, loc.pointer)]
-				v, _ := decode(n.Document)
-				if m, ok := v.(map[string]any); ok {
-					draft := r.inheritedDialect(n)
-					if draft == "" {
-						draft = "https://json-schema.org/draft/2020-12/schema"
-					}
-					m["$schema"] = draft
-				}
-				documents[id] = v
+			if loc.pointer == "" && id == r.documents[loc.path].physical {
+				continue
 			}
+			// Alias retrieval creates a root at its identity URL. Preserve its
+			// collected scope while keeping physical compiler inputs unchanged.
+			n := r.entries[keyAt(loc.path, loc.pointer)]
+			v, _ := decode(n.Document)
+			if m, ok := v.(map[string]any); ok {
+				draft := r.inheritedDialect(n)
+				if draft == "" {
+					draft = "https://json-schema.org/draft/2020-12/schema"
+				}
+				m["$schema"] = draft
+				if _, ref := m["$ref"]; !ref || !strings.Contains(draft, "draft-07") {
+					m["$id"] = n.base
+				}
+			}
+			documents[id] = v
 		}
 	}
 	c.UseLoader(localLoader{documents})
