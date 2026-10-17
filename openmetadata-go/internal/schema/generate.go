@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 type GenerateOptions struct{ Package, OutputDir string }
@@ -56,6 +58,11 @@ func Generate(r *Registry, o GenerateOptions) ([]string, error) {
 	if e = outputAncestors(outAbs); e != nil {
 		return nil, e
 	}
+	for _, path := range sortedKeys(r.documents) {
+		if e := embeddedSourcePath(path); e != nil {
+			return nil, diagnostic("generate", path, "", e)
+		}
+	}
 	if localOptionalPackage(outAbs) {
 		if o.Package != "schema" {
 			return nil, errors.New("support output directory requires package schema")
@@ -79,7 +86,7 @@ func Generate(r *Registry, o GenerateOptions) ([]string, error) {
 		}
 		g.names[keyOf(entry)] = name
 		filename := "models_" + strings.ToLower(name) + ".go"
-		fold := strings.ToLower(filename)
+		fold := filenameFold(filename)
 		if old, ok := fileOwners[fold]; ok {
 			return nil, diagnostic("generate", n.Path, n.Pointer, fmt.Errorf("case-insensitive filename collision %s (also %s)", filename, old))
 		}
@@ -135,6 +142,66 @@ func modelValidate(id string,v support.Value)error{b,e:=v.MarshalJSON();if e!=ni
 	}
 	files["registry-manifest.json"] = append(files["registry-manifest.json"], '\n')
 	return writeGeneratedFiles(outAbs, files)
+}
+
+// Go rejects filename pairs using Unicode simple-fold equivalence, which is
+// broader than lowercasing (for example, s and ſ). Canonicalize each finite
+// fold orbit once per rune instead of comparing every pair of filenames.
+func filenameFold(name string) string {
+	var folded strings.Builder
+	folded.Grow(len(name))
+	for _, r := range name {
+		for {
+			next := unicode.SimpleFold(r)
+			if next <= r {
+				r = next
+				break
+			}
+			r = next
+		}
+		folded.WriteRune(r)
+	}
+	return folded.String()
+}
+
+// Go 1.27.2's cmd/go/internal/load.isBadEmbedName applies module.CheckFilePath
+// to each component and excludes VCS directories, even under all:registry.
+// Keep this preflight aligned with that selected toolchain without renaming or
+// dropping raw sources, or importing cmd/go's private implementation.
+func embeddedSourcePath(path string) error {
+	for _, name := range strings.Split(path, "/") {
+		if err := embeddedSourceComponent(name); err != nil {
+			return fmt.Errorf("%w: source component %q cannot be embedded: %v", ErrBlocked, name, err)
+		}
+	}
+	return nil
+}
+
+func embeddedSourceComponent(name string) error {
+	if !utf8.ValidString(name) || name == "" || strings.HasSuffix(name, ".") {
+		return errors.New("invalid UTF-8, empty name, or trailing dot")
+	}
+	switch name {
+	case ".bzr", ".hg", ".git", ".svn":
+		return errors.New("version-control directory is excluded by Go embedding")
+	}
+	for _, r := range name {
+		if r < utf8.RuneSelf {
+			if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("!#$%&()+,-.=@[]^_{}~ ", r) {
+				continue
+			}
+		} else if unicode.IsLetter(r) {
+			continue
+		}
+		return fmt.Errorf("character %q is not allowed in an embedded filename", r)
+	}
+	base, _, _ := strings.Cut(name, ".")
+	for _, reserved := range [...]string{"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"} {
+		if strings.EqualFold(base, reserved) {
+			return fmt.Errorf("base name %q is reserved on Windows", base)
+		}
+	}
+	return nil
 }
 
 func preflightGeneratedFiles(outAbs string, files map[string][]byte) error {

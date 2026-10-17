@@ -154,3 +154,70 @@ var ignored ModelIgnoredRootValue;if e:=ignored.UnmarshalJSON([]byte("\"b\""));e
 }
 `)
 }
+
+func TestGenerateUnicodeFoldFilenameCollisions(t *testing.T) {
+	for _, paths := range [][]string{{"aS.json", "aſ.json"}, {"aΣ.json", "aς.json"}} {
+		t.Run(strings.Join(paths, "-"), func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out")
+			_, err := Generate(generationRegistry(t, map[string]string{paths[0]: `{}`, paths[1]: `{}`}), GenerateOptions{"models", out})
+			if err == nil || !strings.Contains(err.Error(), "filename collision") || !strings.Contains(err.Error(), paths[0]+"#") || !strings.Contains(err.Error(), paths[1]+"#") {
+				t.Fatalf("missing Unicode-fold collision with both source locators: %v", err)
+			}
+			if _, err := os.Stat(out); !os.IsNotExist(err) {
+				t.Fatal("Unicode-fold collision wrote output")
+			}
+		})
+	}
+}
+
+func TestGenerateEmbeddingPathPreflight(t *testing.T) {
+	for _, path := range []string{
+		"query?.json", "bad?/value.json", "quote\".json", "star*.json", "colon:.json", "line\n.json",
+		".git/value.json", ".hg/value.json", ".svn/value.json", ".bzr/value.json",
+		"CON.json", "nul/value.json", "Com1.more.json", "LPT9/value.json",
+		"trailing./value.json", ".../value.json", "e\u0301.json", "١.json", "😀.json",
+	} {
+		t.Run(path, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out")
+			_, err := Generate(generationRegistry(t, map[string]string{path: `{}`}), GenerateOptions{"models", out})
+			var diagnostic *Diagnostic
+			if !errors.Is(err, ErrBlocked) || !errors.As(err, &diagnostic) || diagnostic.Path != path || diagnostic.Pointer != "" || diagnostic.Stage != "generate" {
+				t.Fatalf("missing original-path embed blocker: %v", err)
+			}
+			if _, err := os.Stat(out); !os.IsNotExist(err) {
+				t.Fatal("unsupported embedding path wrote output")
+			}
+		})
+	}
+}
+
+func TestGeneratedEmbeddingPreservesSupportedPaths(t *testing.T) {
+	const original = "目录/状态#%.json"
+	const raw = "{\n  \"type\":\"object\",\"properties\":{\"payload\":{\"type\":\"string\"}}\n}\n"
+	docs := map[string]string{
+		original:                     raw,
+		"alias.json":                 `{"$ref":"目录/状态%23%25.json"}`,
+		".hidden/_nested/value.json": `{ "type": "boolean" }`,
+		"short~1.json":               `{}`,
+	}
+	var expected strings.Builder
+	for _, path := range sortedKeys(docs) {
+		fmt.Fprintf(&expected, "%q:%q,", path, docs[path])
+	}
+	independentGeneratedModule(t, docs, "models", fmt.Sprintf(`
+import("testing";"net/url")
+func TestEmbedding(t *testing.T){
+for path,want:=range map[string]string{%s}{
+raw,e:=modelSchemas.ReadFile("registry/"+path);if e!=nil||string(raw)!=want{t.Fatalf("embedded raw source changed %%q: %%q %%v",path,raw,e)}
+}
+r,e:=modelRegistry();if e!=nil{t.Fatal(e)}
+target,e:=r.Resolve("file:///__openmetadata_embedded__/alias.json","目录/状态%%23%%25.json");if e!=nil{t.Fatal(e)}
+wantID:=(&url.URL{Scheme:"file",Path:"/__openmetadata_embedded__/"+%q}).String()
+if target.Path!=%q||target.Pointer!=""||target.ID!=wantID||string(target.Document)!=%q{t.Fatalf("source identity changed: %%+v",target)}
+var alias ModelAliasRootValue
+if e:=alias.UnmarshalJSON([]byte("{\"payload\":\"kept\"}"));e!=nil{t.Fatal(e)}
+view,ok,e:=alias.Object();if e!=nil||!ok{t.Fatal(e)};child,ok:=view.Payload.Value();if !ok{t.Fatal("missing referenced property")};if s,ok:=child.StringValue();!ok||s!="kept"{t.Fatal("referenced value lost")}
+if e:=alias.UnmarshalJSON([]byte("{\"payload\":42}"));e==nil{t.Fatal("referenced constraint lost")}
+}
+`, expected.String(), original, original, raw))
+}
