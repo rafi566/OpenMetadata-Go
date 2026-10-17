@@ -5,6 +5,8 @@ package schema
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -148,5 +150,97 @@ func TestDecodeStrictBoundsAndPointers(t *testing.T) {
 	v, err := decode([]byte(`9007199254740993`))
 	if n, ok := v.(json.Number); err != nil || !ok || string(n) != "9007199254740993" {
 		t.Fatalf("decoder rounded number: %v, %v", v, err)
+	}
+}
+
+func TestValueContainerDepthBoundary(t *testing.T) {
+	for _, wrapper := range []struct{ name, open, close string }{
+		{"array", "[", "]"}, {"object", `{"x":`, "}"},
+	} {
+		for _, leaf := range []struct {
+			name, json string
+			containers int
+		}{
+			{"scalar", "0", 0}, {"emptyArray", "[]", 1}, {"emptyObject", "{}", 1},
+		} {
+			for _, depth := range []int{256, 257} {
+				name := fmt.Sprintf("%s/%s/%d", wrapper.name, leaf.name, depth)
+				t.Run(name, func(t *testing.T) {
+					wrappers := depth - leaf.containers
+					input := []byte(strings.Repeat(wrapper.open, wrappers) + leaf.json + strings.Repeat(wrapper.close, wrappers))
+					_, decodeErr := decode(input)
+					_, parseErr := ParseValue(input)
+					if depth == 256 {
+						if decodeErr != nil || parseErr != nil {
+							t.Fatalf("depth 256 rejected: decode=%v ParseValue=%v", decodeErr, parseErr)
+						}
+					} else if decodeErr == nil || parseErr == nil {
+						t.Fatalf("depth 257 accepted: decode=%v ParseValue=%v", decodeErr, parseErr)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestValueIngressSizeBoundary(t *testing.T) {
+	atLimit := bytes.Repeat([]byte(" "), 16<<20)
+	atLimit[0] = '0'
+	v, err := ParseValue(atLimit)
+	if err != nil {
+		t.Fatalf("exactly 16 MiB rejected: %v", err)
+	}
+	if !bytes.Equal(v.RawJSON(), atLimit) {
+		t.Fatal("exact-limit raw value changed")
+	}
+	overLimit := append(atLimit, ' ')
+	if _, err := ParseValue(overLimit); err == nil || !strings.Contains(err.Error(), "exceeds 16 MiB") {
+		t.Fatalf("limit+1 ParseValue: %v", err)
+	}
+	prior, err := ParseValue([]byte(`{"kept":9007199254740993}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prior.UnmarshalJSON(overLimit); err == nil || !strings.Contains(err.Error(), "exceeds 16 MiB") {
+		t.Fatalf("limit+1 UnmarshalJSON: %v", err)
+	}
+	if string(prior.RawJSON()) != `{"kept":9007199254740993}` {
+		t.Fatal("over-limit decode changed receiver")
+	}
+}
+
+func TestValueRejectsOversizeBeforeCopy(t *testing.T) {
+	rejected := make([]byte, 17<<20)
+	prior, err := ParseValue([]byte(`{"kept":9007199254740993}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		call func() error
+	}{
+		{"ParseValue", func() error { _, err := ParseValue(rejected); return err }},
+		{"UnmarshalJSON", func() error { return prior.UnmarshalJSON(rejected) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runtime.GC()
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			err := tc.call()
+			runtime.ReadMemStats(&after)
+			allocated := after.TotalAlloc - before.TotalAlloc
+			t.Logf("rejected input=%d allocated=%d error=%v", len(rejected), allocated, err)
+			if err == nil || !strings.Contains(err.Error(), "exceeds 16 MiB") {
+				t.Fatalf("oversized value not rejected by size gate: %v", err)
+			}
+			// A generous ceiling tolerates runtime bookkeeping but catches a copy
+			// of the caller-owned 17 MiB slice allocated outside this measurement.
+			if allocated > 1<<20 {
+				t.Errorf("rejected input allocated %d bytes; ceiling is 1 MiB", allocated)
+			}
+			if string(prior.RawJSON()) != `{"kept":9007199254740993}` {
+				t.Fatal("oversized decode changed receiver")
+			}
+		})
 	}
 }

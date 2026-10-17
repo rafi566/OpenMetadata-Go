@@ -13,6 +13,9 @@ import (
 type Value struct{ raw []byte }
 
 func ParseValue(b []byte) (Value, error) {
+	if len(b) > maxJSONBytes {
+		return Value{}, errors.New("JSON document exceeds 16 MiB")
+	}
 	owned := bytes.Clone(b)
 	if _, err := decode(owned); err != nil {
 		return Value{}, err

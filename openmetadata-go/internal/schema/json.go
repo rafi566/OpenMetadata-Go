@@ -11,8 +11,10 @@ import (
 	"strings"
 )
 
+const maxJSONBytes = 16 << 20
+
 func decode(b []byte) (any, error) {
-	if len(b) > 16<<20 {
+	if len(b) > maxJSONBytes {
 		return nil, errors.New("JSON document exceeds 16 MiB")
 	}
 	d := json.NewDecoder(bytes.NewReader(b))
@@ -27,9 +29,6 @@ func decode(b []byte) (any, error) {
 	return v, nil
 }
 func readJSONValue(d *json.Decoder, pointer string, depth int) (any, error) {
-	if depth > 256 {
-		return nil, fmt.Errorf("JSON depth exceeds 256 at %s", pointer)
-	}
 	token, e := d.Token()
 	if e != nil {
 		return nil, e
@@ -37,6 +36,9 @@ func readJSONValue(d *json.Decoder, pointer string, depth int) (any, error) {
 	delimiter, ok := token.(json.Delim)
 	if !ok {
 		return token, nil
+	}
+	if depth >= 256 {
+		return nil, fmt.Errorf("JSON depth exceeds 256 at %s", pointer)
 	}
 	switch delimiter {
 	case '{':
