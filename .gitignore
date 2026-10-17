@@ -209,3 +209,8 @@ ingestion/.claude/agents
 test-results/
 
 docs/superpowers/*
+
+# Local migration workspaces, controller state, toolchains and evidence
+/.worktrees/
+/.superpowers/
+/work/
