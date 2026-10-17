@@ -12,6 +12,7 @@ import (
 	"maps"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -76,64 +77,30 @@ func loadRegistry(root string, legacy bool) (*Registry, error) {
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, diagnostic("load", root, "", errors.New("root must be a physical directory"))
 	}
+	if len(info.Name()) > 240 {
+		return nil, diagnostic("load", ".", "", errors.New("filename exceeds 240 bytes"))
+	}
 	abs, e = filepath.EvalSymlinks(abs)
 	if e != nil {
 		return nil, diagnostic("load", root, "", e)
 	}
-	r := &Registry{root: abs, legacy: legacy, documents: map[string]*entry{}, entries: map[string]*entry{}, schemas: map[string]*entry{}, drafts: map[string]string{}, identities: map[string]resource{}, ambiguous: map[string]bool{}}
-	e = filepath.WalkDir(abs, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		rel, _ := filepath.Rel(abs, path)
-		rel = filepath.ToSlash(rel)
-		if d.Type()&os.ModeSymlink != 0 {
-			return diagnostic("load", rel, "", errors.New("symlinks are not admitted"))
-		}
-		if len([]byte(d.Name())) > 240 {
-			return diagnostic("load", rel, "", errors.New("filename exceeds 240 bytes"))
-		}
-		if !d.IsDir() {
-			info, e := d.Info()
-			if e != nil {
-				return diagnostic("load", rel, "", e)
-			}
-			if !info.Mode().IsRegular() {
-				return diagnostic("load", rel, "", errors.New("nonregular files are not admitted"))
-			}
-		}
-		if d.IsDir() || !strings.HasSuffix(rel, ".json") {
-			return nil
-		}
-		if len(r.documents) >= 10000 {
-			return diagnostic("load", rel, "", errors.New("document limit 10000 exceeded"))
-		}
-		f, e := os.Open(path)
-		if e != nil {
-			return e
-		}
-		b, e := io.ReadAll(io.LimitReader(f, (16<<20)+1))
-		f.Close()
-		if e != nil {
-			return e
-		}
-		if len(b) > 16<<20 {
-			return diagnostic("load", rel, "", errors.New("document exceeds 16 MiB"))
-		}
-		v, e := decode(b)
-		if e != nil {
-			return diagnostic("load", rel, "", e)
-		}
-		physical := (&url.URL{Scheme: "file", Path: path}).String()
-		if legacy {
-			physical = legacyBase + rel
-		}
-		rootEntry := &entry{Node: Node{ID: physical, Path: rel, Document: bytes.Clone(b)}, value: v, base: physical, physical: physical}
-		r.documents[rel] = rootEntry
-		return r.indexRaw(rootEntry, "", json.RawMessage(b), physical, 0)
-	})
-	if e != nil {
-		return nil, e
+	return loadRegistryFS(os.DirFS(abs), filepath.ToSlash(abs), legacy)
+}
+
+func loadRegistryFS(source fs.FS, root string, legacy bool) (*Registry, error) {
+	if source == nil {
+		return nil, diagnostic("load", root, "", errors.New("nil registry filesystem"))
+	}
+	r := &Registry{root: root, legacy: legacy, documents: map[string]*entry{}, entries: map[string]*entry{}, schemas: map[string]*entry{}, drafts: map[string]string{}, identities: map[string]resource{}, ambiguous: map[string]bool{}}
+	info, err := fs.Stat(source, ".")
+	if err != nil {
+		return nil, diagnostic("load", root, "", err)
+	}
+	if !info.IsDir() || info.Mode().Type() != fs.ModeDir {
+		return nil, diagnostic("load", root, "", errors.New("root must be a physical directory"))
+	}
+	if err := r.ingestDirectory(source, ".", 0); err != nil {
+		return nil, err
 	}
 	if len(r.documents) == 0 {
 		return nil, diagnostic("load", root, "", errors.New("no JSON documents"))
@@ -196,6 +163,98 @@ func loadRegistry(root string, legacy bool) (*Registry, error) {
 		}
 	}
 	return r, nil
+}
+
+func (r *Registry) ingestDirectory(source fs.FS, dir string, depth int) error {
+	if depth > 256 {
+		return diagnostic("load", dir, "", errors.New("filesystem depth exceeds 256"))
+	}
+	children, err := fs.ReadDir(source, dir)
+	if err != nil {
+		return diagnostic("load", dir, "", err)
+	}
+	sort.Slice(children, func(i, j int) bool { return children[i].Name() < children[j].Name() })
+	previous := ""
+	for _, child := range children {
+		name := child.Name()
+		if !fs.ValidPath(name) || name == "." || strings.ContainsAny(name, "/\x00") {
+			return diagnostic("load", dir, "", fmt.Errorf("invalid filesystem entry name %q", name))
+		}
+		rel := path.Join(dir, name)
+		if name == previous {
+			return diagnostic("load", rel, "", errors.New("duplicate physical path"))
+		}
+		previous = name
+		if len(name) > 240 {
+			return diagnostic("load", rel, "", errors.New("filename exceeds 240 bytes"))
+		}
+		info, err := child.Info()
+		if err != nil {
+			return diagnostic("load", rel, "", err)
+		}
+		if info.Name() != name || child.Type() != info.Mode().Type() || child.IsDir() != info.IsDir() {
+			return diagnostic("load", rel, "", errors.New("inconsistent filesystem entry metadata"))
+		}
+		if info.Mode()&fs.ModeSymlink != 0 {
+			return diagnostic("load", rel, "", errors.New("symlinks are not admitted"))
+		}
+		if info.IsDir() {
+			if info.Mode().Type() != fs.ModeDir {
+				return diagnostic("load", rel, "", errors.New("nonregular directories are not admitted"))
+			}
+			if err := r.ingestDirectory(source, rel, depth+1); err != nil {
+				return err
+			}
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			return diagnostic("load", rel, "", errors.New("nonregular files are not admitted"))
+		}
+		if !strings.HasSuffix(rel, ".json") {
+			continue
+		}
+		if err := r.ingestDocument(source, rel); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Registry) ingestDocument(source fs.FS, rel string) error {
+	if len(r.documents) >= 10000 {
+		return diagnostic("load", rel, "", errors.New("document limit 10000 exceeded"))
+	}
+	f, err := source.Open(rel)
+	if err != nil {
+		return diagnostic("load", rel, "", err)
+	}
+	info, statErr := f.Stat()
+	if statErr != nil || !info.Mode().IsRegular() {
+		f.Close()
+		if statErr == nil {
+			statErr = errors.New("opened nonregular file is not admitted")
+		}
+		return diagnostic("load", rel, "", statErr)
+	}
+	b, readErr := io.ReadAll(io.LimitReader(f, maxJSONBytes+1))
+	closeErr := f.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		return diagnostic("load", rel, "", err)
+	}
+	if len(b) > maxJSONBytes {
+		return diagnostic("load", rel, "", errors.New("document exceeds 16 MiB"))
+	}
+	v, err := decode(b)
+	if err != nil {
+		return diagnostic("load", rel, "", err)
+	}
+	physical := (&url.URL{Scheme: "file", Path: path.Join(r.root, rel)}).String()
+	if r.legacy {
+		physical = legacyBase + rel
+	}
+	rootEntry := &entry{Node: Node{ID: physical, Path: rel, Document: bytes.Clone(b)}, value: v, base: physical, physical: physical}
+	r.documents[rel] = rootEntry
+	return r.indexRaw(rootEntry, "", json.RawMessage(b), physical, 0)
 }
 
 // Escape the physical-path delimiter without changing raw paths or pointers.
