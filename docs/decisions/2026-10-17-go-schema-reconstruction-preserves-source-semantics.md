@@ -1,7 +1,7 @@
 # Go schema reconstruction preserves source identities and exact values
 
 - **Status:** Accepted
-- **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces) · v2 2026-10-17 (source-bound registry and dependency arithmetic admission)
+- **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces) · v2 2026-10-17 (source-bound registry and dependency arithmetic admission) · v3 2026-10-17 (selected schema admission and collector identities)
 - **Deciders:** Migration controller, applying the user's approved full migration and authorized reconstruction
 - **Guard:** Reviewer; focused behavior tests and independent compilation required by the reconstruction plan
 - **Related:** [reconstructed specification](../superpowers/specs/2026-10-17-go-schema-model-reconstruction-design.md); [implementation plan](../superpowers/plans/2026-10-17-go-backend-reconstruction.md)
@@ -100,6 +100,19 @@ ancestors. Resource discovery and metaschema traversal have different purposes;
 an explicit target inherits the collector's resource draft even when its source
 container is a removed assertion. Share this selection with numeric admission
 without adding graph nodes or rewriting raw source.
+
+Discover collector-visible local resource identities independently of active
+assertions. A reference may select a resource beneath an ignored Draft7 sibling;
+unrelated sibling references and arbitrary annotation IDs remain inactive.
+For an explicitly selected raw pointer outside the loaded graph, copy bounded
+entry metadata and maps into a request-local view, mark its effective descendants,
+and resolve newly reached local reference targets before arithmetic admission.
+A document cache hit cannot admit a different selection. Immutable source bytes
+are shared; request selection cannot mutate the loaded graph, identities or raw
+documents. Physical source locations retain joint numeric union accounting.
+An independently retrieved scoped-resource copy carries its actual collected
+draft, including when its raw nested declaration was ignored by ID/ref fallback.
+The original physical compiler document and raw schema bytes stay unchanged.
 
 A Check-local document-closure cache is bounded by admitted documents (at most
 10,000) and discarded. Check continues independent nodes and counts only actual

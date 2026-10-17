@@ -57,6 +57,7 @@ type Registry struct {
 	documents  map[string]*entry
 	entries    map[string]*entry
 	schemas    map[string]*entry
+	drafts     map[string]string
 	identities map[string]resource
 	ambiguous  map[string]bool
 	references []reference
@@ -79,7 +80,7 @@ func loadRegistry(root string, legacy bool) (*Registry, error) {
 	if e != nil {
 		return nil, diagnostic("load", root, "", e)
 	}
-	r := &Registry{root: abs, legacy: legacy, documents: map[string]*entry{}, entries: map[string]*entry{}, schemas: map[string]*entry{}, identities: map[string]resource{}, ambiguous: map[string]bool{}}
+	r := &Registry{root: abs, legacy: legacy, documents: map[string]*entry{}, entries: map[string]*entry{}, schemas: map[string]*entry{}, drafts: map[string]string{}, identities: map[string]resource{}, ambiguous: map[string]bool{}}
 	e = filepath.WalkDir(abs, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -145,6 +146,12 @@ func loadRegistry(root string, legacy bool) (*Registry, error) {
 	for _, path := range sortedKeys(r.documents) {
 		d := r.documents[path]
 		if e := r.addIdentity(d.physical, resource{path, ""}); e != nil {
+			return nil, e
+		}
+	}
+	for _, path := range sortedKeys(r.documents) {
+		d := r.documents[path]
+		if e := r.collectResources(d, d.physical, "", "", 0); e != nil {
 			return nil, e
 		}
 	}
@@ -270,35 +277,13 @@ func (r *Registry) markSchema(n *entry, base, resourcePointer string, depth int)
 	dialect := r.inheritedDialect(n)
 	modern := !strings.Contains(dialect, "draft-07")
 	latest := modern && !strings.Contains(dialect, "2019-09")
-	_, hasRef := m["$ref"]
-	if id, ok := m["$id"].(string); ok && !r.legacy && (modern || !hasRef) {
-		u, e := resolveURL(base, id)
-		if e != nil {
-			return diagnostic("load", n.Path, n.Pointer+"/$id", e)
-		}
-		if u.Fragment != "" {
-			return diagnostic("load", n.Path, n.Pointer+"/$id", fmt.Errorf("%w: nonempty $id fragments", ErrBlocked))
-		}
-		base = u.String()
-		resourcePointer = n.Pointer
-		if e := r.addIdentity(base, resource{n.Path, n.Pointer}); e != nil {
-			return e
+	if _, collected := r.drafts[keyOf(n)]; !collected {
+		if err := r.collectResources(n, base, resourcePointer, dialect, depth); err != nil {
+			return err
 		}
 	}
-	n.base = base
-	n.resourcePointer = resourcePointer
-	n.ID = base + fragment(strings.TrimPrefix(n.Pointer, resourcePointer))
+	base, resourcePointer = n.base, n.resourcePointer
 	r.schemas[keyOf(n)] = n
-	for _, k := range []string{"$anchor", "$dynamicAnchor"} {
-		if !modern || (k == "$dynamicAnchor" && !latest) {
-			continue
-		}
-		if a, ok := m[k].(string); ok {
-			if e := r.addIdentity(base+"#"+a, resource{n.Path, n.Pointer}); e != nil {
-				return e
-			}
-		}
-	}
 	for _, k := range []string{"$ref", "$dynamicRef", "$recursiveRef"} {
 		if (k == "$dynamicRef" && !latest) || (k == "$recursiveRef" && (!modern || latest)) {
 			continue
@@ -387,8 +372,8 @@ func copyNode(n *entry) Node { v := n.Node; v.Document = bytes.Clone(v.Document)
 func (r *Registry) scopeFor(n *entry) *entry {
 	p := n.Pointer
 	for {
-		if parent := r.schemas[keyAt(n.Path, p)]; parent != nil {
-			return parent
+		if _, collected := r.drafts[keyAt(n.Path, p)]; collected {
+			return r.entries[keyAt(n.Path, p)]
 		}
 		i := strings.LastIndex(p, "/")
 		if i < 0 {
@@ -418,7 +403,7 @@ func declaredResourceDialect(n *entry, fallback string) string {
 
 // The pinned collector discovers resources below ref siblings and retains
 // additionalItems as a resource container even in 2020-12. Resource discovery
-// here selects a dialect only; it never adds graph nodes, IDs or references.
+// uses these children without adding active graph nodes or references.
 func compilerResourceChildren(m map[string]any, pointer, dialect string) []string {
 	projection := m
 	if _, ref := m["$ref"]; ref && strings.Contains(dialect, "draft-07") {
@@ -432,4 +417,103 @@ func compilerResourceChildren(m map[string]any, pointer, dialect string) []strin
 		}
 	}
 	return children
+}
+
+// Resource collection is distinct from active assertions: ignored ref siblings
+// can contain applicable IDs without activating their assertions or references.
+func (r *Registry) collectResources(n *entry, base, resourcePointer, fallback string, depth int) error {
+	if _, collected := r.drafts[keyOf(n)]; collected {
+		return nil
+	}
+	if depth > 256 {
+		return diagnostic("load", n.Path, n.Pointer, errors.New("schema depth exceeded"))
+	}
+	m, _ := n.value.(map[string]any)
+	dialect := declaredResourceDialect(n, fallback)
+	modern := !strings.Contains(dialect, "draft-07")
+	latest := modern && !strings.Contains(dialect, "2019-09")
+	_, hasRef := m["$ref"]
+	if id, ok := m["$id"].(string); ok && id != "" && !r.legacy && (modern || !hasRef) {
+		u, err := resolveURL(base, id)
+		if err != nil {
+			return diagnostic("load", n.Path, n.Pointer+"/$id", err)
+		}
+		if u.Fragment != "" {
+			return diagnostic("load", n.Path, n.Pointer+"/$id", fmt.Errorf("%w: nonempty $id fragments", ErrBlocked))
+		}
+		base, resourcePointer = u.String(), n.Pointer
+		if err = r.addIdentity(base, resource{n.Path, n.Pointer}); err != nil {
+			return err
+		}
+	}
+	n.base, n.resourcePointer = base, resourcePointer
+	n.ID = base + fragment(strings.TrimPrefix(n.Pointer, resourcePointer))
+	r.drafts[keyOf(n)] = dialect
+	for _, keyword := range []string{"$anchor", "$dynamicAnchor"} {
+		if !modern || (keyword == "$dynamicAnchor" && !latest) {
+			continue
+		}
+		if anchor, ok := m[keyword].(string); ok {
+			if err := r.addIdentity(base+"#"+anchor, resource{n.Path, n.Pointer}); err != nil {
+				return err
+			}
+		}
+	}
+	for _, pointer := range compilerResourceChildren(m, n.Pointer, dialect) {
+		if child := r.entries[keyAt(n.Path, pointer)]; child != nil {
+			if err := r.collectResources(child, base, resourcePointer, dialect, depth+1); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Previously unselected raw pointers receive a bounded, isolated graph view.
+// Entry metadata is copied because schema marking assigns base/ID fields; raw
+// bytes and decoded values remain immutable and shared with the loaded corpus.
+func (r *Registry) selectedSchema(n *entry) (*Registry, *entry, error) {
+	if r.schemas[keyOf(n)] != nil {
+		return r, n, nil
+	}
+	view := *r
+	view.entries = make(map[string]*entry, len(r.entries))
+	for key, original := range r.entries {
+		copied := *original
+		view.entries[key] = &copied
+	}
+	view.documents = make(map[string]*entry, len(r.documents))
+	for path, original := range r.documents {
+		view.documents[path] = view.entries[keyOf(original)]
+	}
+	view.schemas = make(map[string]*entry, len(r.schemas))
+	for key := range r.schemas {
+		view.schemas[key] = view.entries[key]
+	}
+	view.drafts = maps.Clone(r.drafts)
+	view.identities, view.ambiguous = maps.Clone(r.identities), maps.Clone(r.ambiguous)
+	view.references = make([]reference, len(r.references))
+	for i, ref := range r.references {
+		view.references[i] = ref
+		view.references[i].source = view.entries[keyOf(ref.source)]
+		view.references[i].target = view.entries[keyOf(ref.target)]
+	}
+	selected := view.entries[keyOf(n)]
+	scope := view.scopeFor(selected)
+	if err := view.markSchema(selected, scope.base, scope.resourcePointer, 0); err != nil {
+		return nil, nil, err
+	}
+	for i := len(r.references); i < len(view.references); i++ {
+		ref := &view.references[i]
+		target, err := view.resolve(ref.source.base, ref.ref)
+		if err != nil {
+			return nil, nil, diagnostic("resolve", ref.source.Path, ref.source.Pointer+"/"+escape(ref.keyword), err)
+		}
+		ref.target = target
+		scope := view.scopeFor(target)
+		if err = view.markSchema(target, scope.base, scope.resourcePointer, 0); err != nil {
+			return nil, nil, err
+		}
+	}
+	return &view, selected, nil
 }

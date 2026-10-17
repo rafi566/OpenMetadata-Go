@@ -88,6 +88,14 @@ type numericAdmission struct {
 // A Check owns this cache, with only admitted physical paths as keys (<=10000).
 // Successful admissions retain cost so Validate can share the budget with input.
 func (r *Registry) admitNumericClosure(n *entry, cache map[string]numericAdmission) numericAdmission {
+	if r.schemas[keyOf(n)] == nil {
+		view, selected, err := r.selectedSchema(n)
+		if err != nil {
+			return numericAdmission{err: err}
+		}
+		// A physical-document hit cannot admit a newly selected target.
+		return view.admitNumericClosure(selected, make(map[string]numericAdmission, len(view.documents)))
+	}
 	if admission, ok := cache[n.Path]; ok {
 		return admission
 	}

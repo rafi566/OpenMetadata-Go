@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -78,11 +77,11 @@ func (r *Registry) compiler() (*jsonschema.Compiler, error) {
 				n := r.entries[keyAt(loc.path, loc.pointer)]
 				v, _ := decode(n.Document)
 				if m, ok := v.(map[string]any); ok {
-					if _, declared := m["$schema"]; !declared {
-						if draft := r.inheritedDialect(n); draft != "" {
-							m["$schema"] = draft
-						}
+					draft := r.inheritedDialect(n)
+					if draft == "" {
+						draft = "https://json-schema.org/draft/2020-12/schema"
 					}
+					m["$schema"] = draft
 				}
 				documents[id] = v
 			}
@@ -169,6 +168,10 @@ func (r *Registry) Validate(id string, document []byte) error {
 	if e != nil {
 		return diagnostic("validate", id, "", e)
 	}
+	r, n, e = r.selectedSchema(n)
+	if e != nil {
+		return e
+	}
 	v, e := decode(document)
 	if e != nil {
 		return diagnostic("validate", n.Path, n.Pointer, e)
@@ -194,49 +197,17 @@ func (r *Registry) Validate(id string, document []byte) error {
 }
 
 func (r *Registry) inheritedDialect(n *entry) string {
-	root := r.documents[n.Path]
-	dialect := declaredResourceDialect(root, "")
-	if n.Pointer == "" {
-		return dialect
-	}
-	// Most source documents declare a dialect only at the root. Avoid traversing
-	// their schema children when no ancestor can select another resource draft.
-	scoped := false
-	for p := n.Pointer; p != ""; p = parentPointer(p) {
-		if entry := r.entries[keyAt(n.Path, p)]; entry != nil {
-			if m, ok := entry.value.(map[string]any); ok {
-				_, declared := m["$schema"].(string)
-				id, _ := m["$id"].(string)
-				if declared && id != "" {
-					scoped = true
-					break
-				}
+	for pointer := n.Pointer; ; pointer = parentPointer(pointer) {
+		if dialect, known := r.drafts[keyAt(n.Path, pointer)]; known {
+			if pointer == n.Pointer {
+				return dialect
 			}
-		}
-	}
-	if !scoped {
-		return dialect
-	}
-	current := root
-	for current.Pointer != n.Pointer {
-		m, ok := current.value.(map[string]any)
-		if !ok {
 			return declaredResourceDialect(n, dialect)
 		}
-		var next *entry
-		for _, pointer := range compilerResourceChildren(m, current.Pointer, dialect) {
-			if pointer == n.Pointer || strings.HasPrefix(n.Pointer, pointer+"/") {
-				next = r.entries[keyAt(n.Path, pointer)]
-				break
-			}
+		if pointer == "" {
+			return declaredResourceDialect(n, "")
 		}
-		if next == nil {
-			return declaredResourceDialect(n, dialect)
-		}
-		dialect = declaredResourceDialect(next, dialect)
-		current = next
 	}
-	return dialect
 }
 
 func (r *Registry) compileDiagnostics(n *entry, err error) []error {
