@@ -14,15 +14,15 @@ import (
 func TestT8D1IgnoredRefSiblingPatterns(t *testing.T) {
 	for _, tc := range []struct {
 		name, draft, ref, pattern, container string
-		ignored                              bool
 	}{
-		{"draft7-pattern", "http://json-schema.org/draft-07/schema#", `"$ref":"#/definitions/target",`, "(?=a)", "pattern", true},
-		{"draft7-patternProperties", "http://json-schema.org/draft-07/schema#", `"$ref":"#/definitions/target",`, "(?=a)", "patternProperties", true},
-		{"no-ref", "http://json-schema.org/draft-07/schema#", "", "(?=a)", "pattern", false},
-		{"2020-ref", "https://json-schema.org/draft/2020-12/schema", `"$ref":"#/definitions/target",`, "(?=a)", "pattern", false},
-		{"draft7-malformed", "http://json-schema.org/draft-07/schema#", `"$ref":"#/definitions/target",`, "[", "pattern", true},
-		{"active-valid", "http://json-schema.org/draft-07/schema#", "", "^a", "pattern", false},
-		{"explicit-sibling-target", "http://json-schema.org/draft-07/schema#", `"$ref":"#/patternProperties/a~1b~0c",`, "a/b~c", "patternProperties", false},
+		{"draft7-pattern", "http://json-schema.org/draft-07/schema#", `"$ref":"#/definitions/target",`, "(?=a)", "pattern"},
+		{"draft7-valid-ignored-pattern", "http://json-schema.org/draft-07/schema#", `"$ref":"#/definitions/target",`, "^z", "pattern"},
+		{"draft7-patternProperties", "http://json-schema.org/draft-07/schema#", `"$ref":"#/definitions/target",`, "(?=a)", "patternProperties"},
+		{"no-ref", "http://json-schema.org/draft-07/schema#", "", "(?=a)", "pattern"},
+		{"2020-ref", "https://json-schema.org/draft/2020-12/schema", `"$ref":"#/definitions/target",`, "(?=a)", "pattern"},
+		{"draft7-malformed", "http://json-schema.org/draft-07/schema#", `"$ref":"#/definitions/target",`, "[", "pattern"},
+		{"active-valid", "http://json-schema.org/draft-07/schema#", "", "^a", "pattern"},
+		{"explicit-sibling-target", "http://json-schema.org/draft-07/schema#", `"$ref":"#/patternProperties/a~1b~0c",`, "a/b~c", "patternProperties"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p, _ := json.Marshal(tc.pattern)
@@ -52,6 +52,9 @@ func TestT8D1IgnoredRefSiblingPatterns(t *testing.T) {
 			t.Logf("pinned compile=%v valid=%v invalid=%v registry=%+v check=%v validate=%v", direct, directValid, directInvalid, counts, checked, validated)
 			if (direct == nil) != (checked == nil) || (direct == nil && (directValid == nil) != (validated == nil)) {
 				t.Fatalf("pinned/registry divergence: compile=%v check=%v validate=%v", direct, checked, validated)
+			}
+			if tc.name == "active-valid" && (compiled.Validate("z") == nil || r.Validate(r.Nodes()[0].ID, []byte(`"z"`)) == nil) {
+				t.Fatal("active valid pattern was ignored")
 			}
 			if direct == nil && tc.ref != "" && r.Validate(r.Nodes()[0].ID, []byte(`2`)) == nil {
 				t.Fatal("referenced string constraint lost")

@@ -1,7 +1,7 @@
 # Go schema reconstruction preserves source identities and exact values
 
 - **Status:** Accepted
-- **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces)
+- **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces) · v2 2026-10-17 (source-bound registry and dependency arithmetic admission)
 - **Deciders:** Migration controller, applying the user's approved full migration and authorized reconstruction
 - **Guard:** Reviewer; focused behavior tests and independent compilation required by the reconstruction plan
 - **Related:** [reconstructed specification](../superpowers/specs/2026-10-17-go-schema-model-reconstruction-design.md); [implementation plan](../superpowers/plans/2026-10-17-go-backend-reconstruction.md)
@@ -48,3 +48,62 @@ Recovered originals remain unchanged in private provenance. Reconstructed source
 uses this reachable citation and needs fresh tests, independent review, and
 verified external checkpoints. No endpoint, connector, upgrade, full-migration,
 or performance acceptance follows from this record or schema/model completion.
+
+
+## Amendment v2 — source-bound registry and numeric dependency admission
+
+This amendment attributes the recovered legacy interpretation and numeric
+admission decisions to this reachable record. Their complete original records
+remain private recovery inputs; missing historical decisions are not recreated.
+
+Generic identities remain strict and local. The explicit legacy profile
+`openmetadata-2f0d4a4a` binds every raw schema to baseline
+`2f0d4a4a42663d565b23c6018f098cfb07516fd6`, the pinned raw manifest, physical
+`https://open-metadata.org/schema/` paths, and declared identity metadata.
+Physical identities take priority over declared aliases; ambiguous aliases fail.
+No network or filesystem fallback retrieves references. Returned raw node bytes
+are copies. Private locator keys escape physical-path separators independently
+of unchanged public paths and RFC6901 pointers.
+
+The regex policy is newly produced from unchanged source and finite, bounded
+Java 21 development observations. Java `find` is compared to every Go search;
+Java `matches` is retained separately. This evidence does not introduce Java as
+a server dependency. Generic unsupported regex syntax remains attributed rather
+than silently selecting a backtracking engine. Draft7 reference siblings and
+2020-12 removed `additionalItems` remain distinct from earlier active drafts.
+
+Before dependent compilation or evaluation, admit at most 10,000 mantissa digits
+and absolute explicit exponent 10,000 per numeric token, with joint cost at most
+1,000,000 across the physical reference closure and instance. Effective known
+numeric assertions and const/enum descendants retain their draft semantics.
+Effective nonnegative integral cardinalities and lengths must fit checked int64
+and platform int; ordinary negative/fractional operands retain metaschema errors.
+Raw Number and Value storage keep exact tokens independently of these budgets.
+
+Pinned compiler metaschemas also perform arithmetic before ignoring Draft7
+reference assertions or rejecting malformed elements of uniqueness arrays.
+Admit those canonical metaschema obligations separately, including recognized
+schema containers under ignored siblings. Union physical-document/pointer
+numeric locations with effective assertion locations, counting each once.
+Distinct metaschema blockers identify that obligation; inactive cardinalities
+acquire no platform-int width restriction. Raw input, graph membership, identity,
+reference resolution and compiler input remain unchanged. Unknown/default/example
+annotations acquire no blanket numeric assertions. Custom metaschema-selected
+vocabulary arithmetic remains unsupported through explicit canonical-draft
+admission; an ordinary canonical schema's own vocabulary declaration does not
+select a new metaschema.
+
+Select nested drafts using the pinned compiler's resource collector: a nested
+declaration requires an applicable resource ID, including the Draft7 reference
+object ID rule and fallback draft. Ignore declarations in unknown annotation
+ancestors. Resource discovery and metaschema traversal have different purposes;
+an explicit target inherits the collector's resource draft even when its source
+container is a removed assertion. Share this selection with numeric admission
+without adding graph nodes or rewriting raw source.
+
+A Check-local document-closure cache is bounded by admitted documents (at most
+10,000) and discarded. Check continues independent nodes and counts only actual
+successful Compile calls. Instance blockers include their escaped pointer.
+Arbitrary-exponent validation, custom arithmetic domains, dynamic scope and full
+migration parity remain explicit frontiers; bounded admission is not semantic
+acceptance of every exact raw token.

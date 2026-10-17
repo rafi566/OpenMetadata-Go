@@ -13,6 +13,18 @@ import urllib.parse
 BASELINE = '2f0d4a4a42663d565b23c6018f098cfb07516fd6'
 MANIFEST = 'bc57fb1ceb163f2c724aa0436d70698388a879c4d4b5ba7f2cf46fab3a6b7584'
 LIMIT = 256 << 20
+OBSERVER_SOURCE_SHA256 = '46804e85e0fbaa0a5c183129b6da9cff28602264e43d4d52fc071e9bdd39c9f0'
+JAVA_EXECUTABLE_SHA256 = '6698f6f10143ed8463b06062281c727152d2e0ae2a3569b1716fbb2c6cedf0ba'
+
+
+def bounded_read(path, limit):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > limit:
+        raise ValueError('observer file bounds/type: ' + str(path))
+    with path.open('rb') as stream:
+        data = stream.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError('observer file bounds: ' + str(path))
+    return data
 
 
 def sha(b):
@@ -40,7 +52,9 @@ def inventory(root):
     if root.is_symlink() or not root.is_dir():
         raise ValueError('root must be a physical directory')
     docs, entries, refs, patterns = [], [], [], []
-    for directory, dirs, files in os.walk(root, followlinks=False):
+    def fail_walk(error):
+        raise error
+    for directory, dirs, files in os.walk(root, followlinks=False, onerror=fail_walk):
         for name in sorted(dirs + files):
             p = Path(directory) / name
             mode = p.lstat().st_mode
@@ -60,7 +74,9 @@ def inventory(root):
                 raise ValueError('legacy source document must be an object')
             rel = p.relative_to(root).as_posix()
             digest = sha(raw)
-            docs.append(dict(path=rel, sha256=digest, id=value.get('$id'), dialect=value.get('$schema'), physical='https://open-metadata.org/schema/' + rel))
+            docs.append(dict(path=rel, sha256=digest, id=value.get('$id'),
+                             dialect=value.get('$schema'),
+                             physical='https://open-metadata.org/schema/' + rel))
             def walk(v, ptr='', depth=0):
                 if (isinstance(v, (dict, list)) and depth >= 256) or len(entries) >= 1000000:
                     raise ValueError('structure bounds')
@@ -129,18 +145,35 @@ def main():
         print(json.dumps(dict(documents=len(docs), references=len(refs), entries=len(entries), patterns=len(ps), samples=len(ss), manifest_sha256=MANIFEST)))
         return
     obs = a.finalize
-    receipt = load((obs/'observer-receipt.json').read_bytes())
+    receipt = load(bounded_read(obs/'observer-receipt.json', 64 << 10))
+    if receipt.get('java_sha256') != JAVA_EXECUTABLE_SHA256 or not receipt.get('java_version', '').startswith('openjdk version "21.'):
+        raise ValueError('Java executable/version differs from the authorized native observer')
+    expected_limits = dict(timeout_seconds=120, heap_mib=256, output_cap_bytes=64 << 20,
+                           pattern_cap=1000, sample_cap=512, codepoints_per_input_cap=4096)
+    if any(receipt.get(k) != v for k, v in expected_limits.items()):
+        raise ValueError('observer limits differ from the bounded observation contract')
+    observed = {}
     for key in ('word', 'regex'):
         if receipt[key]['exit'] != 0:
             raise ValueError('observer did not succeed')
     for name in ('RegexObserver.java', 'regex-patterns.b64', 'regex-samples.b64', 'java-regex.tsv', 'java-word-ranges.tsv'):
-        if sha((obs/name).read_bytes()) != receipt['sha256'][name]:
+        observed[name] = bounded_read(obs/name, 64 << 20)
+        if sha(observed[name]) != receipt['sha256'][name]:
             raise ValueError('observer hash mismatch: ' + name)
+    if sha(observed['RegexObserver.java']) != OBSERVER_SOURCE_SHA256:
+        raise ValueError('observer source differs from the exact retained observer')
+    if len(observed['java-regex.tsv']) + len(observed['java-word-ranges.tsv']) > 64 << 20:
+        raise ValueError('observer combined output exceeds 64 MiB')
     for name in ('regex-patterns.b64', 'regex-samples.b64'):
-        if (out/name).read_bytes() != (obs/name).read_bytes():
+        if (out/name).read_bytes() != observed[name]:
             raise ValueError('observer input drift')
-    ranges = [list(map(int, line.split('\t'))) for line in (obs/'java-word-ranges.tsv').read_text().splitlines()]
-    rows = (obs/'java-regex.tsv').read_text().splitlines()
+    ranges = [list(map(int, line.split('\t'))) for line in observed['java-word-ranges.tsv'].decode().splitlines()]
+    previous = -2
+    for interval in ranges:
+        if len(interval) != 2 or not 0 <= interval[0] <= interval[1] <= 0x10ffff or interval[0] <= previous + 1:
+            raise ValueError('invalid Unicode word ranges')
+        previous = interval[1]
+    rows = observed['java-regex.tsv'].decode().splitlines()
     if len(rows) != len(ps)*len(ss):
         raise ValueError('incomplete observer Cartesian product')
     for i, row in enumerate(rows):
@@ -152,7 +185,7 @@ def main():
     for d in docs:
         aliases.setdefault(d['id'], []).append(d['path'])
     targets = []
-    entry_keys = {e['path']+'#'+e['pointer'] for e in entries}
+    entry_keys = {(e['path'], e['pointer']) for e in entries}
     for ref in refs:
         target = urllib.parse.urljoin('https://open-metadata.org/schema/' + ref['path'], ref['value'])
         url, fragment = urllib.parse.urldefrag(target)
@@ -160,17 +193,26 @@ def main():
         if len(paths) != 1:
             raise ValueError('unresolved/ambiguous source ref: ' + target)
         pointer = urllib.parse.unquote(fragment)
-        if paths[0] + '#' + pointer not in entry_keys:
+        if (paths[0], pointer) not in entry_keys:
             raise ValueError('missing target pointer: ' + target)
         targets.append(dict(ref, target_path=paths[0], target_pointer=pointer))
     module = Path(__file__).resolve().parent.parent
-    policy = dict(baseline=BASELINE, manifest_sha256=MANIFEST, documents=docs, patterns=pats, java_word_ranges=ranges, producer_sha256=script_sha, mismatches=[d for d in docs if d['id'] != d['physical']], collisions=[dict(id=k, members=[d for d in docs if d['path'] in v], physical_priority=physical.get(k)) for k, v in sorted(aliases.items()) if len(v) > 1])
+    collisions = []
+    for alias, paths in sorted(aliases.items()):
+        if len(paths) > 1:
+            collisions.append(dict(id=alias,
+                                   members=[d for d in docs if d['path'] in paths],
+                                   physical_priority=physical.get(alias)))
+    policy = dict(baseline=BASELINE, manifest_sha256=MANIFEST, documents=docs,
+                  patterns=pats, java_word_ranges=ranges, producer_sha256=script_sha,
+                  mismatches=[d for d in docs if d['id'] != d['physical']],
+                  collisions=collisions)
     js(module/'internal/schema/legacy-profile.json', policy)
     dest = module/'testdata/schemas'
     for name in ('regex-input.json', 'regex-patterns.b64', 'regex-samples.b64'):
         write(dest/name, (out/name).read_bytes())
     for name in ('java-regex.tsv', 'java-word-ranges.tsv'):
-        write(dest/name, (obs/name).read_bytes())
+        write(dest/name, observed[name])
     js(dest/'regex-provenance.json', dict(baseline=BASELINE, manifest_sha256=MANIFEST, producer_sha256=script_sha, observer=receipt))
     js(dest/'reference-targets.json', targets)
     print(json.dumps(dict(documents=len(docs), references=len(refs), entries=len(entries), patterns=len(ps), samples=len(ss), observations=len(rows), word_ranges=len(ranges))))

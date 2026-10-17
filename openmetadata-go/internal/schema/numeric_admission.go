@@ -5,13 +5,20 @@ package schema
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 )
 
 // Raw Number ownership is independent of this dependency arithmetic boundary.
 // ADR:2026-10-17-go-schema-reconstruction-preserves-source-semantics
-type numericBudget struct{ cost int }
+type numericLocation struct{ path, pointer string }
+
+type numericBudget struct {
+	cost   int
+	source string
+	seen   map[numericLocation]bool
+}
 
 func (b *numericBudget) number(token string) error {
 	mantissa, exponent := token, ""
@@ -46,9 +53,17 @@ func (b *numericBudget) number(token string) error {
 func (b *numericBudget) walk(v any, pointer string) (string, error) {
 	switch value := v.(type) {
 	case json.Number:
+		location := numericLocation{b.source, pointer}
+		if b.seen[location] {
+			return "", nil
+		}
 		if err := b.number(string(value)); err != nil {
 			return pointer, err
 		}
+		if b.seen == nil {
+			b.seen = map[numericLocation]bool{}
+		}
+		b.seen[location] = true
 	case map[string]any:
 		for _, key := range sortedKeys(value) {
 			if p, err := b.walk(value[key], pointer+"/"+escape(key)); err != nil {
@@ -92,10 +107,28 @@ func (r *Registry) admitNumericClosure(n *entry, cache map[string]numericAdmissi
 		}
 	}
 	var err error
+	metaScopes := make(map[numericLocation]string)
+	for _, path := range sortedKeys(documents) {
+		if err = r.admitNumericMetaschema(r.documents[path], "", &budget, metaScopes); err != nil {
+			break
+		}
+	}
 	for _, key := range sortedKeys(r.schemas) {
+		if err != nil {
+			break
+		}
 		node := r.schemas[key]
 		if !documents[node.Path] {
 			continue
+		}
+		// Explicit reference targets can be beneath unrecognized containers.
+		if _, checked := metaScopes[numericLocation{node.Path, node.Pointer}]; !checked {
+			// Collector resource scope can cross containers that this metaschema
+			// treats as annotations, such as additionalItems in 2020-12.
+			fallback := r.inheritedDialect(node)
+			if err = r.admitNumericMetaschema(node, fallback, &budget, metaScopes); err != nil {
+				break
+			}
 		}
 		if err = r.admitNumericSchema(node, &budget); err != nil {
 			break
@@ -106,6 +139,7 @@ func (r *Registry) admitNumericClosure(n *entry, cache map[string]numericAdmissi
 	return admission
 }
 func (r *Registry) admitNumericSchema(n *entry, budget *numericBudget) error {
+	budget.source = n.Path
 	m, ok := n.value.(map[string]any)
 	if !ok {
 		return nil
@@ -163,6 +197,93 @@ func (r *Registry) admitNumericInstance(n *entry, instance any) error {
 	budget := numericBudget{cost: admission.cost}
 	if pointer, err := budget.walk(instance, ""); err != nil {
 		return diagnostic("validate", n.Path, n.Pointer, fmt.Errorf("%w at instance #%s", err, pointer))
+	}
+	return nil
+}
+
+func parentPointer(pointer string) string {
+	if i := strings.LastIndex(pointer, "/"); i >= 0 {
+		return pointer[:i]
+	}
+	return ""
+}
+
+// Canonical metaschemas perform arithmetic before ignoring ref assertions or
+// rejecting malformed uniqueness-array elements. This walk changes no graph or
+// compiler input; source locations share the assertion budget exactly once.
+func (r *Registry) admitNumericMetaschema(n *entry, fallback string, budget *numericBudget, scopes map[numericLocation]string) error {
+	location := numericLocation{n.Path, n.Pointer}
+	if _, checked := scopes[location]; checked {
+		return nil
+	}
+	m, object := n.value.(map[string]any)
+	if !object {
+		scopes[location] = fallback
+		return nil
+	}
+	dialect := fallback
+	if declared, ok := m["$schema"].(string); ok {
+		switch declared {
+		case "http://json-schema.org/draft-07/schema#", "http://json-schema.org/draft-07/schema", "https://json-schema.org/draft/2019-09/schema", "https://json-schema.org/draft/2020-12/schema":
+		default:
+			return diagnostic("compile", n.Path, n.Pointer+"/$schema", fmt.Errorf("%w: compiler-metaschema admission supports canonical drafts only: %s", ErrBlocked, declared))
+		}
+		dialect = declaredResourceDialect(n, fallback)
+	}
+	scopes[location] = dialect
+	modern := !strings.Contains(dialect, "draft-07")
+	budget.source = n.Path
+	walk := func(value any, pointer string) error {
+		if p, err := budget.walk(value, pointer); err != nil {
+			return diagnostic("compile", n.Path, p, fmt.Errorf("compiler-metaschema arithmetic admission: %w", err))
+		}
+		return nil
+	}
+	for _, keyword := range []string{"multipleOf", "minItems", "maxItems", "minLength", "maxLength", "minProperties", "maxProperties", "minContains", "maxContains"} {
+		if !modern && (keyword == "minContains" || keyword == "maxContains") {
+			continue
+		}
+		if value, ok := m[keyword].(json.Number); ok {
+			if err := walk(value, n.Pointer+"/"+keyword); err != nil {
+				return err
+			}
+		}
+	}
+	for _, keyword := range []string{"required", "type", "enum"} {
+		if keyword == "enum" && modern {
+			continue
+		}
+		if value, ok := m[keyword].([]any); ok {
+			if err := walk(value, n.Pointer+"/"+keyword); err != nil {
+				return err
+			}
+		}
+	}
+	for _, keyword := range []string{"dependencies", "dependentRequired"} {
+		if keyword == "dependentRequired" && !modern {
+			continue
+		}
+		if values, ok := m[keyword].(map[string]any); ok {
+			for _, name := range sortedKeys(values) {
+				if value, ok := values[name].([]any); ok {
+					if err := walk(value, n.Pointer+"/"+keyword+"/"+escape(name)); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	projection := m
+	if _, ref := m["$ref"]; ref && !modern {
+		projection = maps.Clone(m)
+		delete(projection, "$ref")
+	}
+	for _, pointer := range schemaChildren(projection, n.Pointer, dialect) {
+		if child := r.entries[keyAt(n.Path, pointer)]; child != nil {
+			if err := r.admitNumericMetaschema(child, dialect, budget, scopes); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

@@ -75,7 +75,7 @@ func (r *Registry) compiler() (*jsonschema.Compiler, error) {
 			} else {
 				// A scoped resource is locally retrievable by its own identity.
 				// Preserve its inherited dialect when loaded independently.
-				n := r.entries[loc.path+"#"+loc.pointer]
+				n := r.entries[keyAt(loc.path, loc.pointer)]
 				v, _ := decode(n.Document)
 				if m, ok := v.(map[string]any); ok {
 					if _, declared := m["$schema"]; !declared {
@@ -194,21 +194,49 @@ func (r *Registry) Validate(id string, document []byte) error {
 }
 
 func (r *Registry) inheritedDialect(n *entry) string {
-	p := n.Pointer
-	for {
-		if v := r.entries[n.Path+"#"+p]; v != nil {
-			if m, ok := v.value.(map[string]any); ok {
-				if d, ok := m["$schema"].(string); ok {
-					return d
+	root := r.documents[n.Path]
+	dialect := declaredResourceDialect(root, "")
+	if n.Pointer == "" {
+		return dialect
+	}
+	// Most source documents declare a dialect only at the root. Avoid traversing
+	// their schema children when no ancestor can select another resource draft.
+	scoped := false
+	for p := n.Pointer; p != ""; p = parentPointer(p) {
+		if entry := r.entries[keyAt(n.Path, p)]; entry != nil {
+			if m, ok := entry.value.(map[string]any); ok {
+				_, declared := m["$schema"].(string)
+				id, _ := m["$id"].(string)
+				if declared && id != "" {
+					scoped = true
+					break
 				}
 			}
 		}
-		i := strings.LastIndex(p, "/")
-		if i < 0 {
-			return ""
-		}
-		p = p[:i]
 	}
+	if !scoped {
+		return dialect
+	}
+	current := root
+	for current.Pointer != n.Pointer {
+		m, ok := current.value.(map[string]any)
+		if !ok {
+			return declaredResourceDialect(n, dialect)
+		}
+		var next *entry
+		for _, pointer := range compilerResourceChildren(m, current.Pointer, dialect) {
+			if pointer == n.Pointer || strings.HasPrefix(n.Pointer, pointer+"/") {
+				next = r.entries[keyAt(n.Path, pointer)]
+				break
+			}
+		}
+		if next == nil {
+			return declaredResourceDialect(n, dialect)
+		}
+		dialect = declaredResourceDialect(next, dialect)
+		current = next
+	}
+	return dialect
 }
 
 func (r *Registry) compileDiagnostics(n *entry, err error) []error {
