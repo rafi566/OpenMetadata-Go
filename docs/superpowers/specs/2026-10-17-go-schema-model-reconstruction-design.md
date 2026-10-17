@@ -53,6 +53,14 @@ signatures for `LoadRegistry`, `LoadLegacyRegistry`, `Resolve`, `Nodes`,
 successful Compiled counts. Typed diagnostics identify stages and `ErrBlocked`.
 Attempt independent nodes after failures; never report partial work as complete.
 
+Collect applicable local resource identities separately from active assertions,
+including recognized containers beneath ignored Draft7 reference siblings. Keep
+unrelated ignored references and arbitrary annotation identities inactive.
+Explicit raw-pointer selection remains supported: admit the selected schema,
+effective descendants and newly reached local reference closure in an immutable,
+bounded request-local view. Reuse source bytes without changing the loaded graph
+or identities; a document-only cache hit cannot admit a different selected target.
+
 `LoadEmbeddedRegistry(source fs.FS, profile string) (*Registry, error)` consumes
 the same bounded loader/index/resolver as disk loading. Empty profile uses the
 retrieval root `file:///__openmetadata_embedded__/`; the only nonempty profile
