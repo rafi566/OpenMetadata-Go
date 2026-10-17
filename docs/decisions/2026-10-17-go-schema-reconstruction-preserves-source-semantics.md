@@ -1,7 +1,7 @@
 # Go schema reconstruction preserves source identities and exact values
 
 - **Status:** Accepted
-- **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces) · v2 2026-10-17 (source-bound registry and dependency arithmetic admission) · v3 2026-10-17 (selected schema admission and collector identities)
+- **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces) · v2 2026-10-17 (source-bound registry and dependency arithmetic admission) · v3 2026-10-17 (selected schema admission and collector identities) · v4 2026-10-17 (independent resource base preservation)
 - **Deciders:** Migration controller, applying the user's approved full migration and authorized reconstruction
 - **Guard:** Reviewer; focused behavior tests and independent compilation required by the reconstruction plan
 - **Related:** [reconstructed specification](../superpowers/specs/2026-10-17-go-schema-model-reconstruction-design.md); [implementation plan](../superpowers/plans/2026-10-17-go-backend-reconstruction.md)
@@ -113,6 +113,12 @@ documents. Physical source locations retain joint numeric union accounting.
 An independently retrieved scoped-resource copy carries its actual collected
 draft, including when its raw nested declaration was ignored by ID/ref fallback.
 The original physical compiler document and raw schema bytes stay unchanged.
+Preserve the collected absolute base in that copy's applicable `$id` as well;
+reapplying a relative path ID would move its inner references to different
+physical targets. Draft7 reference-object IDs retain their ignored semantics.
+Admission and compilation must resolve the same original source targets.
+Root aliases use the same independent-copy rule; retrieval through an original
+physical URL keeps its original compiler input.
 
 A Check-local document-closure cache is bounded by admitted documents (at most
 10,000) and discarded. Check continues independent nodes and counts only actual
