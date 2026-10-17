@@ -82,9 +82,9 @@ func (r *Registry) compiler() (*jsonschema.Compiler, error) {
 				if draft == "" {
 					draft = "https://json-schema.org/draft/2020-12/schema"
 				}
-				m["$schema"] = draft
+				projectMetadataString(m, "$schema", draft)
 				if _, ref := m["$ref"]; !ref || !strings.Contains(draft, "draft-07") {
-					m["$id"] = n.base
+					projectMetadataString(m, "$id", n.base)
 				}
 			}
 			documents[id] = v
@@ -93,6 +93,17 @@ func (r *Registry) compiler() (*jsonschema.Compiler, error) {
 	c.UseLoader(localLoader{documents})
 	return c, nil
 }
+
+func projectMetadataString(object map[string]any, keyword, replacement string) {
+	if original, present := object[keyword]; present {
+		if _, validType := original.(string); !validType {
+			// Malformed metadata must reach canonical validation without repair.
+			return
+		}
+	}
+	object[keyword] = replacement
+}
+
 func setValue(v any, pointer string, value any) {
 	parts := splitPointer(pointer)
 	for _, part := range parts[:len(parts)-1] {

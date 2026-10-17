@@ -63,6 +63,9 @@ or identities; a document-only cache hit cannot admit a different selected targe
 An independently retrieved resource copy, including a root alias, preserves its
 collected absolute base and effective draft, with draft-correct ID semantics. Relative IDs must not move
 compilation away from the original physical targets covered by admission.
+Preserve present malformed metadata in copies for canonical-metaschema rejection
+at original source pointers; contextual normalization must not silently repair
+invalid fields or replace ordinary invalidity with unsupported-semantics blockers.
 
 `LoadEmbeddedRegistry(source fs.FS, profile string) (*Registry, error)` consumes
 the same bounded loader/index/resolver as disk loading. Empty profile uses the

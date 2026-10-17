@@ -1,7 +1,7 @@
 # Go schema reconstruction preserves source identities and exact values
 
 - **Status:** Accepted
-- **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces) · v2 2026-10-17 (source-bound registry and dependency arithmetic admission) · v3 2026-10-17 (selected schema admission and collector identities) · v4 2026-10-17 (independent resource base preservation)
+- **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces) · v2 2026-10-17 (source-bound registry and dependency arithmetic admission) · v3 2026-10-17 (selected schema admission and collector identities) · v4 2026-10-17 (independent resource base preservation) · v5 2026-10-17 (metadata validity preservation)
 - **Deciders:** Migration controller, applying the user's approved full migration and authorized reconstruction
 - **Guard:** Reviewer; focused behavior tests and independent compilation required by the reconstruction plan
 - **Related:** [reconstructed specification](../superpowers/specs/2026-10-17-go-schema-model-reconstruction-design.md); [implementation plan](../superpowers/plans/2026-10-17-go-backend-reconstruction.md)
@@ -119,6 +119,11 @@ physical targets. Draft7 reference-object IDs retain their ignored semantics.
 Admission and compilation must resolve the same original source targets.
 Root aliases use the same independent-copy rule; retrieval through an original
 physical URL keeps its original compiler input.
+Only absent or string-typed metadata receives contextual string replacements.
+Present malformed `$schema` or `$id` types stay in independent copies for the
+pinned canonical metaschema to reject at their original source locations.
+Projection must not repair invalid metadata or turn ordinary invalidity into
+unsupported-semantics blockers; no separate canonical validator is introduced.
 
 A Check-local document-closure cache is bounded by admitted documents (at most
 10,000) and discarded. Check continues independent nodes and counts only actual
