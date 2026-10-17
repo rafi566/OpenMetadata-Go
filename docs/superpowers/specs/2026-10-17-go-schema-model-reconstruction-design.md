@@ -63,7 +63,8 @@ at 10,000, document/value bytes at 16 MiB, nesting depth at 256, and raw entries
 at 1,000,000. Bound reads before allocation and reject duplicate JSON keys.
 
 Preserve the fixes that ignore Draft7 `$ref` object schema siblings and treat
-modern `additionalItems` as an annotation rather than a schema child. Freshly
+2020-12 `additionalItems` as an annotation rather than a schema child; earlier
+drafts retain its applicable behavior. Freshly
 characterize ignored Draft7 `$ref` sibling `patternDiagnostics` against the
 pinned compiler, with active-pattern controls; correct any observed divergence.
 Legacy regex compatibility needs finite, reproducible, source-bound policy and
@@ -101,6 +102,24 @@ document's transitive reference closure and the instance. Use decimal text,
 never floating point or huge powers. Schema traversal respects effective
 draft/ref keyword activity, known assertions, cardinalities, and const/enum
 descendants; unknown/default/examples annotations do not become assertions.
+
+The dependency validates canonical metaschemas before compiling runtime
+assertions. Separately admit numeric arithmetic required by those metaschemas,
+including ignored Draft7 ref siblings, recognized schema containers beneath
+them, and numeric descendants of uniqueness-checked enum/required/type/dependency
+arrays where the declared canonical draft imposes uniqueness. Malformed array
+elements need admission before the dependency's later type error. Use the union
+of physical-document/RFC6901 numeric source locations required by effective
+assertions and metaschema arithmetic; count each location once. The same joint
+closure-plus-instance cost applies. Keep raw documents, compiler input, identities,
+graph nodes and references unchanged; do not follow ignored references during
+this traversal. Metaschema blockers identify that obligation explicitly. The preflight inherits
+each compiler resource's dialect; a nested declaration switches it only at an
+applicable ID-bearing resource, preserving Draft7 ref-object ID behavior.
+Custom metaschema-selected vocabulary arithmetic domains are unsupported before
+dependent arithmetic. An ordinary schema declaring a vocabulary while selecting
+a canonical metaschema does not select a custom metaschema. Unknown/default/example
+annotations remain outside blanket arithmetic scanning.
 
 Effective nonnegative integral min/max Items, Length, Properties, and Contains
 operands must fit checked int64 and platform int. Contains bounds apply only

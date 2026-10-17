@@ -52,7 +52,7 @@ func (r *Registry) resolve(base, ref string) (*entry, error) {
 		return nil, fmt.Errorf("ambiguous declared alias %s", full)
 	}
 	if loc, ok := r.identities[full]; ok {
-		return r.entries[loc.path+"#"+loc.pointer], nil
+		return r.entries[keyAt(loc.path, loc.pointer)], nil
 	}
 	pointer := u.Fragment
 	u.Fragment = ""
@@ -77,7 +77,7 @@ func (r *Registry) resolve(base, ref string) (*entry, error) {
 			i++
 		}
 	}
-	n := r.entries[loc.path+"#"+loc.pointer+pointer]
+	n := r.entries[keyAt(loc.path, loc.pointer+pointer)]
 	if n == nil {
 		return nil, fmt.Errorf("missing JSON pointer %s#%s", loc.path, loc.pointer+pointer)
 	}

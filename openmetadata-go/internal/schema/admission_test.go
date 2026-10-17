@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -98,5 +99,83 @@ func TestRawMetadataIsolationAfterValidation(t *testing.T) {
 	}
 	if err := r.Validate("https://example.test/a", []byte(`{"n":"bad"}`)); err == nil {
 		t.Fatal("validation changed after returned mutation")
+	}
+}
+
+func TestPhysicalPathAndPointerRemainDistinct(t *testing.T) {
+	r, err := LoadRegistry(fixture(t, map[string]string{
+		"a.json":                 `{"$defs":{"b.json#":{"type":"string"},"b.json%23":{"type":"boolean"},"a/b~c#%":{"type":"null"}}}`,
+		"a.json#/$defs/b.json":   `{"type":"integer"}`,
+		"a.json%23/$defs/b.json": `false`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := r.documents["a.json"]
+	target, err := r.Resolve(a.physical, "#/$defs/b.json%23")
+	if err != nil || target.Path != "a.json" || target.Pointer != "/$defs/b.json#" || string(target.Document) != `{"type":"string"}` {
+		t.Fatalf("physical-path/pointer namespace collision: %+v %v", target, err)
+	}
+	counts, err := r.Check()
+	if err != nil || counts.Nodes != 6 || counts.Compiled != 6 {
+		t.Fatalf("distinct source nodes lost: %+v %v", counts, err)
+	}
+	if err = r.Validate(a.physical+"#/$defs/b.json%23", []byte(`"a"`)); err != nil {
+		t.Fatal(err)
+	}
+	if err = r.Validate(a.physical+"#/$defs/b.json%23", []byte(`1`)); err == nil {
+		t.Fatal("wrong physical document supplied reference target")
+	}
+}
+
+func TestPhysicalPercentPathsAndEscapedPointers(t *testing.T) {
+	r, err := LoadRegistry(fixture(t, map[string]string{
+		"a.json":                 `{"$defs":{"b.json%23":{"type":"boolean"},"a/b~c#%":{"type":"null"}}}`,
+		"a.json#/$defs/b.json":   `{"type":"integer"}`,
+		"a.json%23/$defs/b.json": `false`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := r.documents["a.json"]
+	for _, tc := range []struct{ ref, pointer, valid, invalid string }{
+		{"#/$defs/b.json%2523", "/$defs/b.json%23", `true`, `1`},
+		{"#/$defs/a~1b~0c%23%25", "/$defs/a~1b~0c#%", `null`, `false`},
+	} {
+		node, err := r.Resolve(a.physical, tc.ref)
+		if err != nil || node.Path != "a.json" || node.Pointer != tc.pointer {
+			t.Fatalf("escaped locator %+v %v", node, err)
+		}
+		if err = r.Validate(a.physical+tc.ref, []byte(tc.valid)); err != nil {
+			t.Fatal(err)
+		}
+		if err = r.Validate(a.physical+tc.ref, []byte(tc.invalid)); err == nil {
+			t.Fatal("escaped target constraint lost")
+		}
+	}
+	if err = r.Validate(r.documents["a.json#/$defs/b.json"].physical, []byte(`1`)); err != nil {
+		t.Fatal(err)
+	}
+	if err = r.Validate(r.documents["a.json%23/$defs/b.json"].physical, []byte(`1`)); err == nil {
+		t.Fatal("literal percent path aliased hash path")
+	}
+}
+
+func TestRegistryRawEntryBound(t *testing.T) {
+	for _, count := range []int{999998, 999999} {
+		t.Run(strconv.Itoa(count), func(t *testing.T) {
+			raw := `{"default":[` + strings.TrimSuffix(strings.Repeat("null,", count), ",") + `]}`
+			r, err := LoadRegistry(fixture(t, map[string]string{"a.json": raw}))
+			if count == 999998 {
+				if err != nil || len(r.Nodes()) != 1 {
+					t.Fatalf("exact raw-entry threshold rejected: %v", err)
+				}
+			} else {
+				var d *Diagnostic
+				if err == nil || !errors.As(err, &d) || d.Stage != "load" || d.Pointer != "/default/999998" || !strings.Contains(err.Error(), "structure limit") {
+					t.Fatalf("raw-entry overflow not attributed: %v", err)
+				}
+			}
+		})
 	}
 }

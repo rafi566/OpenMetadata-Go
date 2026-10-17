@@ -1,7 +1,7 @@
 {
   "baseline": "2f0d4a4a42663d565b23c6018f098cfb07516fd6",
   "manifest_sha256": "bc57fb1ceb163f2c724aa0436d70698388a879c4d4b5ba7f2cf46fab3a6b7584",
-  "producer_sha256": "a51e8c6cfc280fb6ec6d63292670809bad8a05ec2eb7e2077b480fd06c3eb11b",
+  "producer_sha256": "d9160efe626a1e73e68edb2a7d77d83e7c96d248e469d02ccb14e28b678a12a1",
   "observer": {
     "java_executable": "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
     "java_sha256": "6698f6f10143ed8463b06062281c727152d2e0ae2a3569b1716fbb2c6cedf0ba",

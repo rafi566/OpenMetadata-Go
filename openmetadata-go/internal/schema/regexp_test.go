@@ -51,22 +51,17 @@ func TestFreshJavaRegexSearchParity(t *testing.T) {
 }
 
 func TestFreshReferenceTargets(t *testing.T) {
-	var rows []struct{ Path, Pointer, Value, TargetPath, TargetPointer string }
 	raw, err := os.ReadFile("../../testdata/schemas/reference-targets.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Producer field names identify exact physical source and target pointers.
-	var encoded []struct {
+	var rows []struct {
 		Path, Pointer, Value string
 		TargetPath           string `json:"target_path"`
 		TargetPointer        string `json:"target_pointer"`
 	}
-	if err = json.Unmarshal(raw, &encoded); err != nil {
+	if err = json.Unmarshal(raw, &rows); err != nil {
 		t.Fatal(err)
-	}
-	for _, row := range encoded {
-		rows = append(rows, struct{ Path, Pointer, Value, TargetPath, TargetPointer string }{row.Path, row.Pointer, row.Value, row.TargetPath, row.TargetPointer})
 	}
 	r, err := LoadLegacyRegistry(corpusRoot(t))
 	if err != nil {

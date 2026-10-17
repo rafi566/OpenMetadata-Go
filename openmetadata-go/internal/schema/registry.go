@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -189,7 +190,12 @@ func loadRegistry(root string, legacy bool) (*Registry, error) {
 	}
 	return r, nil
 }
-func keyOf(n *entry) string { return n.Path + "#" + n.Pointer }
+
+// Escape the physical-path delimiter without changing raw paths or pointers.
+func keyAt(path, pointer string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(path, "%", "%25"), "#", "%23") + "#" + pointer
+}
+func keyOf(n *entry) string { return keyAt(n.Path, n.Pointer) }
 func sortedKeys[T any](m map[string]T) []string {
 	k := make([]string, 0, len(m))
 	for s := range m {
@@ -306,7 +312,7 @@ func (r *Registry) markSchema(n *entry, base, resourcePointer string, depth int)
 		}
 	}
 	for _, p := range schemaChildren(m, n.Pointer, r.inheritedDialect(n)) {
-		child := r.entries[n.Path+"#"+p]
+		child := r.entries[keyAt(n.Path, p)]
 		if child == nil {
 			continue
 		}
@@ -381,7 +387,7 @@ func copyNode(n *entry) Node { v := n.Node; v.Document = bytes.Clone(v.Document)
 func (r *Registry) scopeFor(n *entry) *entry {
 	p := n.Pointer
 	for {
-		if parent := r.schemas[n.Path+"#"+p]; parent != nil {
+		if parent := r.schemas[keyAt(n.Path, p)]; parent != nil {
 			return parent
 		}
 		i := strings.LastIndex(p, "/")
@@ -391,4 +397,39 @@ func (r *Registry) scopeFor(n *entry) *entry {
 		p = p[:i]
 	}
 	return r.documents[n.Path]
+}
+
+func declaredResourceDialect(n *entry, fallback string) string {
+	m, ok := n.value.(map[string]any)
+	if !ok {
+		return fallback
+	}
+	declared, ok := m["$schema"].(string)
+	if !ok {
+		return fallback
+	}
+	id, _ := m["$id"].(string)
+	_, ref := m["$ref"]
+	if n.Pointer == "" || (id != "" && !(strings.Contains(declared, "draft-07") && ref)) {
+		return declared
+	}
+	return fallback
+}
+
+// The pinned collector discovers resources below ref siblings and retains
+// additionalItems as a resource container even in 2020-12. Resource discovery
+// here selects a dialect only; it never adds graph nodes, IDs or references.
+func compilerResourceChildren(m map[string]any, pointer, dialect string) []string {
+	projection := m
+	if _, ref := m["$ref"]; ref && strings.Contains(dialect, "draft-07") {
+		projection = maps.Clone(m)
+		delete(projection, "$ref")
+	}
+	children := schemaChildren(projection, pointer, dialect)
+	if !strings.Contains(dialect, "draft-07") && !strings.Contains(dialect, "2019-09") {
+		if _, present := m["additionalItems"]; present {
+			children = append(children, pointer+"/additionalItems")
+		}
+	}
+	return children
 }
