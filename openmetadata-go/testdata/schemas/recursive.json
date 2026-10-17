@@ -1,0 +1,9 @@
+{
+  "$id": "https://example.test/a",
+  "type": "object",
+  "properties": {
+    "next": {
+      "$ref": "#"
+    }
+  }
+}

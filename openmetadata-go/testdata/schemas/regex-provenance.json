@@ -1,0 +1,44 @@
+{
+  "baseline": "2f0d4a4a42663d565b23c6018f098cfb07516fd6",
+  "manifest_sha256": "bc57fb1ceb163f2c724aa0436d70698388a879c4d4b5ba7f2cf46fab3a6b7584",
+  "producer_sha256": "a51e8c6cfc280fb6ec6d63292670809bad8a05ec2eb7e2077b480fd06c3eb11b",
+  "observer": {
+    "java_executable": "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+    "java_sha256": "6698f6f10143ed8463b06062281c727152d2e0ae2a3569b1716fbb2c6cedf0ba",
+    "java_version": "openjdk version \"21.0.12.1\" 2026-08-18\nOpenJDK Runtime Environment (build 21.0.12.1+1-1-deb13u1-Debian)\nOpenJDK 64-Bit Server VM (build 21.0.12.1+1-1-deb13u1-Debian, mixed mode, sharing)\n",
+    "timeout_seconds": 120,
+    "heap_mib": 256,
+    "output_cap_bytes": 67108864,
+    "pattern_cap": 1000,
+    "sample_cap": 512,
+    "codepoints_per_input_cap": 4096,
+    "word": {
+      "command": [
+        "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+        "-Xmx256m",
+        "openmetadata-go/work/schema/reconstruction/RegexObserver.java",
+        "word"
+      ],
+      "exit": 0,
+      "elapsed_seconds": 1.273
+    },
+    "regex": {
+      "command": [
+        "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+        "-Xmx256m",
+        "openmetadata-go/work/schema/reconstruction/RegexObserver.java",
+        "openmetadata-go/work/schema/reconstruction/regex-patterns.b64",
+        "openmetadata-go/work/schema/reconstruction/regex-samples.b64"
+      ],
+      "exit": 0,
+      "elapsed_seconds": 0.774
+    },
+    "sha256": {
+      "RegexObserver.java": "46804e85e0fbaa0a5c183129b6da9cff28602264e43d4d52fc071e9bdd39c9f0",
+      "regex-patterns.b64": "7d8480dbbfac5dd0eab2051041f689ed8c9cd41e152352f6fac7bc844a6914a1",
+      "regex-samples.b64": "590222a73607614c0aadb7428691d15968312fbeba2822c259829ae4058b2545",
+      "java-word-ranges.tsv": "809ee3e193b88f631fa713371cf0cf627432f906909ae2706d525839f9a5ec0e",
+      "java-regex.tsv": "beb0749dc0d9173d346a4673137465dc043dd0e47c64f40c2851d4533b16bff6"
+    }
+  }
+}

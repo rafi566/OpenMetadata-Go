@@ -1,0 +1,11 @@
+{
+  "$id": "https://example.test/a",
+  "$defs": {
+    "a": {
+      "$id": "same"
+    },
+    "b": {
+      "$id": "same"
+    }
+  }
+}

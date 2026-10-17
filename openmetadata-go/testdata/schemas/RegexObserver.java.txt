@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: Apache-2.0
+import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.regex.Pattern;
+class RegexObserver {
+  public static void main(String[] args) throws Exception {
+    if (args[0].equals("word")) {
+      Pattern word = Pattern.compile("(?U)\\w");
+      int start = -1;
+      for (int cp = 0; cp <= 0x110000; cp++) {
+        boolean matches = cp < 0x110000 && word.matcher(new String(Character.toChars(cp))).matches();
+        if (matches && start < 0) start = cp;
+        if (!matches && start >= 0) { System.out.println(start + "\t" + (cp - 1)); start = -1; }
+      }
+      return;
+    }
+    var patterns = Files.readAllLines(Path.of(args[0]));
+    var samples = Files.readAllLines(Path.of(args[1]));
+    for (int i = 0; i < patterns.size(); i++) {
+      var p = Pattern.compile(new String(Base64.getDecoder().decode(patterns.get(i)), StandardCharsets.UTF_8));
+      for (int j = 0; j < samples.size(); j++) {
+        var s = new String(Base64.getDecoder().decode(samples.get(j)), StandardCharsets.UTF_8);
+        System.out.println(i + "\t" + j + "\t" + p.matcher(s).find() + "\t" + p.matcher(s).matches());
+      }
+    }
+  }
+}
