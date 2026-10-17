@@ -134,25 +134,36 @@ func modelValidate(id string,v support.Value)error{b,e:=v.MarshalJSON();if e!=ni
 		return nil, e
 	}
 	files["registry-manifest.json"] = append(files["registry-manifest.json"], '\n')
+	return writeGeneratedFiles(outAbs, files)
+}
+
+func preflightGeneratedFiles(outAbs string, files map[string][]byte) error {
 	total := 0
 	for _, p := range sortedKeys(files) {
 		total += len(files[p])
 		if total > 256<<20 {
-			return nil, errors.New("generated output exceeds 256 MiB")
+			return errors.New("generated output exceeds 256 MiB")
 		}
 		if e := outputAncestors(filepath.Dir(filepath.Join(outAbs, filepath.FromSlash(p)))); e != nil {
-			return nil, e
+			return e
 		}
 		if _, e := os.Lstat(filepath.Join(outAbs, filepath.FromSlash(p))); e == nil {
-			return nil, fmt.Errorf("output already exists: %s", p)
+			return fmt.Errorf("output already exists: %s", p)
 		} else if !os.IsNotExist(e) {
-			return nil, e
+			return e
 		}
+	}
+	return nil
+}
+
+func writeGeneratedFiles(outAbs string, files map[string][]byte) ([]string, error) {
+	if err := preflightGeneratedFiles(outAbs, files); err != nil {
+		return nil, err
 	}
 	var result []string
 	for _, p := range sortedKeys(files) {
 		dest := filepath.Join(outAbs, filepath.FromSlash(p))
-		if e = os.MkdirAll(filepath.Dir(dest), 0755); e != nil {
+		if e := os.MkdirAll(filepath.Dir(dest), 0755); e != nil {
 			return nil, e
 		}
 		f, e := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
@@ -209,13 +220,16 @@ func (g *modelGenerator) supported(n *entry) error {
 	dialect := g.registry.inheritedDialect(n)
 	modern := !strings.Contains(dialect, "draft-07")
 	latest := modern && !strings.Contains(dialect, "2019-09")
-	for _, k := range []string{"oneOf", "anyOf", "allOf", "if", "then", "else", "not", "dependentSchemas", "patternProperties", "$dynamicRef", "$recursiveRef", "prefixItems"} {
-		if (k == "dependentSchemas" && !modern) || ((k == "$dynamicRef" || k == "prefixItems") && !latest) || (k == "$recursiveRef" && (!modern || latest)) {
+	for _, k := range []string{"oneOf", "anyOf", "allOf", "if", "then", "else", "not", "dependentSchemas", "patternProperties", "$dynamicRef", "$recursiveRef", "prefixItems", "contains", "unevaluatedProperties", "unevaluatedItems"} {
+		if ((k == "dependentSchemas" || k == "unevaluatedProperties" || k == "unevaluatedItems") && !modern) || ((k == "$dynamicRef" || k == "prefixItems") && !latest) || (k == "$recursiveRef" && (!modern || latest)) {
 			continue
 		}
 		if _, ok := m[k]; ok {
 			return diagnostic("generate", n.Path, n.Pointer+"/"+escape(k), fmt.Errorf("%w: %s generation requires Task 5", ErrBlocked, k))
 		}
+	}
+	if _, tuple := m["items"].([]any); tuple && !latest {
+		return diagnostic("generate", n.Path, n.Pointer+"/items", fmt.Errorf("%w: tuple generation requires Task 5", ErrBlocked))
 	}
 	if a, ok := m["type"].([]any); ok {
 		nonNull := 0
@@ -229,7 +243,7 @@ func (g *modelGenerator) supported(n *entry) error {
 		}
 	}
 	if _, ref := m["$ref"]; ref {
-		for _, k := range []string{"type", "properties", "additionalProperties", "items", "required", "enum", "const", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"} {
+		for _, k := range []string{"type", "properties", "additionalProperties", "items", "required", "enum", "const", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minLength", "maxLength", "pattern", "minItems", "maxItems", "uniqueItems", "minProperties", "maxProperties", "propertyNames", "dependentRequired"} {
 			if _, ok := m[k]; ok {
 				return diagnostic("generate", n.Path, n.Pointer+"/"+k, fmt.Errorf("%w: asserted reference siblings require Task 5", ErrBlocked))
 			}
@@ -306,7 +320,8 @@ func(v %s) JSONValue() support.Value{return v.value}
 		}
 	}
 	props, hasProps := m["properties"].(map[string]any)
-	if typ == "object" || hasProps {
+	_, hasMap := m["additionalProperties"].(map[string]any)
+	if typ == "object" || hasProps || hasMap {
 		projection := name + "Object"
 		if e := g.claim(projection, n.Path+"#"+n.Pointer+" (object view)"); e != nil {
 			return nil, e
@@ -343,7 +358,7 @@ func(v %s) JSONValue() support.Value{return v.value}
 			fmt.Fprintf(&body, "if raw,exists:=values[%q];exists{if raw.IsNull(){out.%s=%sNull[*%s]()}else{var child %s;if e:=child.UnmarshalJSON(raw.RawJSON());e!=nil{return %s{},false,e};out.%s=%sSome(&child)}}\n", key, field, g.optional, child, child, projection, field, g.optional)
 		}
 		fmt.Fprint(&body, "return out,true,nil}\n")
-		if _, ok := m["additionalProperties"]; ok {
+		if hasMap {
 			child := g.names[keyAt(shape.Path, shape.Pointer+"/additionalProperties")]
 			if child != "" && m["additionalProperties"] != false {
 				fmt.Fprintln(&body, "// AdditionalProperties returns detached checked values for additional keys; false means a nonobject, and an empty object yields a nonnil empty map.")
