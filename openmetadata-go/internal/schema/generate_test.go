@@ -98,14 +98,14 @@ func TestGenerateNamesAndOutputSafety(t *testing.T) {
 			t.Fatalf("filename bound: %v", err)
 		}
 	})
-	t.Run("composition-preflight", func(t *testing.T) {
+	t.Run("dynamic-preflight", func(t *testing.T) {
 		out := filepath.Join(t.TempDir(), "out")
-		_, err := Generate(generationRegistry(t, map[string]string{"union.json": `{"oneOf":[{},{}]}`}), GenerateOptions{"fixture", out})
-		if !errors.Is(err, ErrBlocked) || !strings.Contains(err.Error(), "union.json#/oneOf") {
-			t.Fatalf("composition blocker: %v", err)
+		_, err := Generate(generationRegistry(t, map[string]string{"dynamic.json": `{"$dynamicRef":"#"}`}), GenerateOptions{"fixture", out})
+		if !errors.Is(err, ErrBlocked) || !strings.Contains(err.Error(), "dynamic.json#/$dynamicRef") {
+			t.Fatalf("dynamic blocker: %v", err)
 		}
 		if _, err := os.Stat(out); !os.IsNotExist(err) {
-			t.Fatal("composition preflight wrote files")
+			t.Fatal("dynamic preflight wrote files")
 		}
 	})
 }
@@ -117,6 +117,13 @@ func independentGeneratedModule(t *testing.T, documents map[string]string, pkg, 
 		t.Fatal(err)
 	}
 	root := t.TempDir()
+	if retained := os.Getenv("OM_GENERATED_EVIDENCE_DIR"); retained != "" {
+		root, err = os.MkdirTemp(retained, "emitted-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("retained independent module: %s", root)
+	}
 	copyFile := func(rel string) {
 		t.Helper()
 		b, e := os.ReadFile(filepath.Join(moduleRoot, rel))

@@ -15,11 +15,9 @@ import (
 
 func TestGenerateDeferredSemantics(t *testing.T) {
 	for _, tc := range []struct{ name, raw, pointer string }{
-		{"tuple", `{"$schema":"http://json-schema.org/draft-07/schema#","type":"array","items":[{}]}`, "/items"},
-		{"contains", `{"type":"array","contains":{}}`, "/contains"},
-		{"unevaluated-properties", `{"unevaluatedProperties":false}`, "/unevaluatedProperties"},
-		{"unevaluated-items", `{"unevaluatedItems":false}`, "/unevaluatedItems"},
-		{"ref-sibling", `{"$ref":"#/$defs/value","pattern":"a","$defs":{"value":{"type":"string"}}}`, "/pattern"},
+		{"dynamic", `{"$dynamicRef":"#"}`, "/$dynamicRef"},
+		{"recursive", `{"$schema":"https://json-schema.org/draft/2019-09/schema","$recursiveRef":"#"}`, "/$recursiveRef"},
+		{"no-shape-cycle", `{"$ref":"#"}`, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "out")

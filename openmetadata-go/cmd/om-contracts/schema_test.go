@@ -137,7 +137,7 @@ func TestSchemaGenerateOutput(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Fatal("CLI overwrote existing artifact")
 	}
-	blocked := schemaRoot(t, map[string]string{"union.json": `{"oneOf":[{},{}]}`})
+	blocked := schemaRoot(t, map[string]string{"dynamic.json": `{"$dynamicRef":"#"}`})
 	out = filepath.Join(t.TempDir(), "blocked")
 	if code := schemaCommand([]string{"generate", "--root", blocked, "--output", out, "--package", "models"}, io.Discard, &stderr); code != 2 {
 		t.Fatalf("generation blocker returned%d: %s", code, stderr.String())
