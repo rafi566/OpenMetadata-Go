@@ -19,8 +19,11 @@ resume. Include the exact Git HEAD, task state, and outstanding review findings.
 Read each uploaded backup back independently and verify its size and SHA256;
 upload success alone is not a recovery check. Record the backup reference in
 the private resume page. Back up at stable implementation milestones and after
-reviewed units, before proceeding to dependent work. Mark unreviewed source and
+reviewed units, before proceeding to dependent work. During implementation,
+close and pause product writes for a checkpoint before more than 20 minutes of
+source writing; resume after external verification. Mark unreviewed source and
 incomplete test processes explicitly. Do not archive secrets or tool caches.
+Keep the external evidence copy when cleaning up temporary local task files.
 
 A temporary machine can still disappear. External verified checkpoints make
 work recoverable up to the latest checkpoint; they do not guarantee that an
@@ -31,8 +34,13 @@ environment persists or that an in-progress write survives.
 1. Clone the repository and check out `go/full-backend-reconstruction`.
    Compare HEAD to the latest verified private checkpoint before writing.
 2. Open the actor-private migration backup page in the connected account.
-   Download the latest restore envelope and verify its SHA256 against that
-   page. Decode its base64 archive; verify the archive byte count and SHA256.
+   Use the latest verified checkpoint's restore envelope or ordered JSON parts.
+   Text readback is limited to 256 KiB per file; larger archives use small parts.
+   For multipart backups, verify each part_index, part_count, and part_sha256;
+   decode part_base64 and concatenate decoded bytes in index order. Do not
+   concatenate the JSON documents. Verify the complete archive byte count and
+   SHA256 against the private page. For a single envelope, decode archive_base64
+   and perform the same complete-archive checks.
    Inspect archive member paths before extracting into a new private scratch
    directory. Reject absolute paths, traversal, and links outside that directory.
 3. Restore the matching ledger and evidence. Read task completion and review
