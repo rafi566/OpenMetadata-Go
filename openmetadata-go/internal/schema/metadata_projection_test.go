@@ -26,7 +26,7 @@ func metadataRejectedAt(err error, path, pointer string) bool {
 }
 
 func TestMalformedMetadataProjectionControls(t *testing.T) {
-	for _, kind := range []string{"root-schema", "nested-schema", "anchored-id"} {
+	for _, kind := range []string{"root-schema", "nested-schema", "root-id", "anchored-id"} {
 		for _, token := range []string{"42", "null", "false", "[]", "{}"} {
 			t.Run(kind+"/"+token, func(t *testing.T) {
 				const childPointer = "/$defs/a~1b~0c"
@@ -41,6 +41,9 @@ func TestMalformedMetadataProjectionControls(t *testing.T) {
 				case "anchored-id":
 					raw = `{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"dir/root","$defs":{"a/b~c":{"$anchor":"leaf","$id":` + token + `,"type":"integer"}}}`
 					selector, pointer, target = "dir/root#leaf", childPointer+"/$id", childPointer
+				case "root-id":
+					raw = `{"$id":` + token + `,"type":"integer"}`
+					selector, pointer = "b%23%25.json", "/$id"
 				}
 				value, err := decode([]byte(raw))
 				if err != nil {
@@ -61,8 +64,14 @@ func TestMalformedMetadataProjectionControls(t *testing.T) {
 					t.Fatal(err)
 				}
 				before := registrySelectionSnapshot(r)
-				if admission := r.admitNumericClosure(r.documents["a.json"], map[string]numericAdmission{}); admission.err != nil || admission.cost != 0 {
+				admission := r.admitNumericClosure(r.documents["a.json"], map[string]numericAdmission{})
+				if admission.cost != 0 || errors.Is(admission.err, ErrBlocked) {
 					t.Fatalf("ordinary metadata became arithmetic/unsupported: %+v", admission)
+				}
+				if strings.HasSuffix(kind, "schema") {
+					requireMetadataRejection(t, admission.err, "b#%.json", pointer)
+				} else if admission.err != nil {
+					t.Fatal(admission.err)
 				}
 				ids := []string{r.documents["b#%.json"].physical + fragment(target), r.documents["a.json"].physical}
 				var group sync.WaitGroup
@@ -119,4 +128,113 @@ func TestRootAliasMalformedDialect(t *testing.T) {
 	}
 	requireMetadataRejection(t, r.Validate(r.documents["b.json"].physical, []byte(`2`)), "b.json", "/$schema")
 	requireMetadataRejection(t, r.Validate(r.documents["a.json"].physical, []byte(`2`)), "b.json", "/$schema")
+}
+
+// Ported from the independent fix3 review. The ordinary probe established that
+// alias retrieval changed the compiler's metaschema arithmetic domain to 2020.
+func malformedSevenResource(t *testing.T, numbers string) *Registry {
+	t.Helper()
+	r, err := LoadRegistry(fixture(t, map[string]string{
+		"a.json": `{"$ref":"dir/child"}`,
+		"b.json": `{"$schema":"http://json-schema.org/draft-07/schema#","definitions":{"target":{"$id":"dir/child","$schema":42,"dependentRequired":{"x":[` + numbers + `]}}}}`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+func TestMalformedResourceOrdinaryDraft(t *testing.T) {
+	r := malformedSevenResource(t, "1,2")
+	for _, id := range []string{r.documents["b.json"].physical + "#/definitions/target", r.documents["a.json"].physical} {
+		err := r.Validate(id, []byte(`2`))
+		t.Logf("%s: %v", id, err)
+		requireMetadataRejection(t, err, "b.json", "/definitions/target/$schema")
+		if strings.Contains(err.Error(), "dependentRequired") {
+			t.Fatal("alias evaluated Draft2020 arithmetic despite collected Draft7 scope")
+		}
+	}
+}
+
+func TestMalformedResourceAdmission(t *testing.T) {
+	r := malformedSevenResource(t, "1e10001,2")
+	// Direct preflight only: never Compile/Validate this source to establish RED.
+	admission := r.admitNumericClosure(r.documents["a.json"], map[string]numericAdmission{})
+	if admission.err == nil {
+		t.Fatalf("compiler-visible arithmetic admitted without guard: cost=%d", admission.cost)
+	}
+	requireMetadataRejection(t, admission.err, "b.json", "/definitions/target/$schema")
+}
+
+func TestMalformedResourceGuardedIntegration(t *testing.T) {
+	for _, draft := range []string{"", "http://json-schema.org/draft-07/schema#", "https://json-schema.org/draft/2019-09/schema", "https://json-schema.org/draft/2020-12/schema"} {
+		for _, token := range []string{"42", "null", "false", "[]", "{}", "[1e10001,2]", `{"number":1e10001}`} {
+			t.Run(draft+"/"+token, func(t *testing.T) {
+				declaration := ""
+				if draft != "" {
+					declaration = `"$schema":"` + draft + `",`
+				}
+				r, err := LoadRegistry(fixture(t, map[string]string{
+					"a.json":   `{"$ref":"dir/child"}`,
+					"b#%.json": `{` + declaration + `"definitions":{"a/b~c":{"$id":"dir/child","$schema":` + token + `,"dependentRequired":{"x":[1e10001,2]}}}}`,
+					"c.json":   `{"type":"integer"}`,
+				}))
+				if err != nil {
+					t.Fatal(err)
+				}
+				const pointer = "/definitions/a~1b~0c/$schema"
+				before := registrySelectionSnapshot(r)
+				// Both direct entry points must reject canonically BEFORE any public
+				// integration; a guard regression stops this test at the safe boundary.
+				for _, path := range []string{"a.json", "b#%.json"} {
+					admission := r.admitNumericClosure(r.documents[path], map[string]numericAdmission{})
+					requireMetadataRejection(t, admission.err, "b#%.json", pointer)
+					if admission.cost != 0 {
+						t.Fatalf("malformed declaration reached sibling arithmetic: %+v", admission)
+					}
+					var meta *jsonschema.SchemaValidationError
+					var validation *jsonschema.ValidationError
+					if !errors.As(admission.err, &meta) || !errors.As(meta.Err, &validation) {
+						t.Fatalf("lost native canonical error: %v", admission.err)
+					}
+					wantDraft := draft
+					if wantDraft == "" {
+						wantDraft = "https://json-schema.org/draft/2020-12/schema"
+					}
+					if strings.TrimSuffix(validation.SchemaURL, "#") != strings.TrimSuffix(wantDraft, "#") {
+						t.Fatalf("canonical rejection draft %q, want %q", validation.SchemaURL, wantDraft)
+					}
+				}
+				var group sync.WaitGroup
+				problems := make(chan error, 9)
+				for repeat := 0; repeat < 3; repeat++ {
+					group.Add(1)
+					go func() {
+						defer group.Done()
+						for _, id := range []string{r.documents["a.json"].physical, r.documents["b#%.json"].physical + "#/definitions/a~1b~0c"} {
+							if err := r.Validate(id, []byte(`2`)); !metadataRejectedAt(err, "b#%.json", pointer) {
+								problems <- fmt.Errorf("lost guarded canonical rejection: %v", err)
+							}
+						}
+						if err := r.Validate(r.documents["c.json"].physical, []byte(`2`)); err != nil {
+							problems <- err
+						}
+					}()
+				}
+				group.Wait()
+				close(problems)
+				for err := range problems {
+					t.Error(err)
+				}
+				counts, err := r.Check()
+				requireMetadataRejection(t, err, "b#%.json", pointer)
+				if counts.Compiled != 1 {
+					t.Fatalf("independent successful Compile count: %+v", counts)
+				}
+				if registrySelectionSnapshot(r) != before {
+					t.Fatal("early rejection mutated source/identity/graph")
+				}
+			})
+		}
+	}
 }

@@ -229,6 +229,11 @@ func (r *Registry) admitNumericMetaschema(n *entry, fallback string, budget *num
 		scopes[location] = fallback
 		return nil
 	}
+	if declaration, present := m["$schema"]; present {
+		if _, validType := declaration.(string); !validType {
+			return r.rejectMalformedDialect(n, fallback, declaration)
+		}
+	}
 	dialect := fallback
 	if declared, ok := m["$schema"].(string); ok {
 		switch declared {
