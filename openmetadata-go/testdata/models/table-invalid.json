@@ -1,0 +1,54 @@
+[
+  {},
+  {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "name": "orders",
+    "columns": [
+      {
+        "name": "outer",
+        "dataType": "STRUCT",
+        "children": [
+          {
+            "name": "inner",
+            "dataType": "BIGINT",
+            "precision": 19,
+            "scale": 0
+          }
+        ]
+      }
+    ],
+    "updatedAt": "yesterday",
+    "deleted": false,
+    "extension": {
+      "vendor": {
+        "large": 9007199254740993
+      }
+    }
+  },
+  {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "name": "orders",
+    "columns": [
+      {
+        "name": "outer",
+        "dataType": "STRUCT",
+        "children": [
+          {
+            "name": "inner",
+            "dataType": "BIGINT",
+            "precision": 19,
+            "scale": 0
+          }
+        ]
+      }
+    ],
+    "updatedAt": 9007199254740993,
+    "deleted": false,
+    "extension": {
+      "vendor": {
+        "large": 9007199254740993
+      }
+    },
+    "tableType": "NOT_A_TYPE"
+  }
+]

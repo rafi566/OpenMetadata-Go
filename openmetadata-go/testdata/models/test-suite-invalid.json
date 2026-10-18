@@ -1,0 +1,27 @@
+[
+  {},
+  {
+    "name": "suite",
+    "connection": {
+      "config": null,
+      "resultSummary": 17
+    },
+    "testCaseResultSummary": [
+      {
+        "timestamp": "bad"
+      }
+    ]
+  },
+  {
+    "name": "suite",
+    "connection": {
+      "config": null,
+      "resultSummary": 17
+    },
+    "testCaseResultSummary": [
+      {
+        "status": "bogus"
+      }
+    ]
+  }
+]

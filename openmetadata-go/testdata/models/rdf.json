@@ -1,0 +1,29 @@
+{
+  "subject": {
+    "type": "uri",
+    "value": "https://example.test/s"
+  },
+  "predicate": {
+    "type": "uri",
+    "value": "https://example.test/p"
+  },
+  "object": {
+    "type": "triple",
+    "value": {
+      "subject": {
+        "type": "bnode",
+        "value": "b"
+      },
+      "predicate": {
+        "type": "uri",
+        "value": "https://example.test/p"
+      },
+      "object": {
+        "type": "literal",
+        "value": "hello",
+        "xml:lang": "en",
+        "its:dir": "ltr"
+      }
+    }
+  }
+}

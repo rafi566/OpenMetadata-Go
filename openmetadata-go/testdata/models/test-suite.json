@@ -1,0 +1,17 @@
+{
+  "name": "suite",
+  "connection": {
+    "config": null,
+    "resultSummary": 17
+  },
+  "testCaseResultSummary": [
+    {
+      "testCaseName": "case",
+      "status": "Success",
+      "timestamp": 9007199254740993,
+      "vendor": {
+        "precise": 9007199254740993
+      }
+    }
+  ]
+}

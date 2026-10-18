@@ -1,0 +1,28 @@
+{
+  "apiVersion": "v3.1.0",
+  "kind": "DataContract",
+  "id": "contract",
+  "version": "1.0",
+  "status": "active",
+  "vendor": {
+    "large": 9007199254740993,
+    "null": null
+  },
+  "schema": [
+    {
+      "name": "orders",
+      "vendorSchema": true,
+      "properties": [
+        {
+          "name": "column",
+          "logicalType": "integer",
+          "vendorColumn": [
+            false,
+            null,
+            9007199254740993
+          ]
+        }
+      ]
+    }
+  ]
+}

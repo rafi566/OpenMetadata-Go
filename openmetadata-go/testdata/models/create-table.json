@@ -1,0 +1,24 @@
+{
+  "name": "orders",
+  "columns": [
+    {
+      "name": "outer",
+      "dataType": "STRUCT",
+      "children": [
+        {
+          "name": "inner",
+          "dataType": "BIGINT",
+          "precision": 19,
+          "scale": 0
+        }
+      ]
+    }
+  ],
+  "databaseSchema": "service.database.schema",
+  "extension": {
+    "large": 9007199254740993,
+    "nullable": null,
+    "empty": [],
+    "false": false
+  }
+}
