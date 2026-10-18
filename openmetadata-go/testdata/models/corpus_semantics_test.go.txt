@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	support "github.com/rafi566/OpenMetadata-Go/openmetadata-go/internal/schema"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -20,6 +22,22 @@ type corpusModel interface {
 	MarshalJSON() ([]byte, error)
 	Validate() error
 	JSONValue() support.Value
+}
+
+func isSchemaRejection(err error) bool {
+	var diagnostic *support.Diagnostic
+	if !errors.As(err, &diagnostic) || diagnostic.Stage != "validate" {
+		return false
+	}
+	_, invalid := diagnostic.Cause.(*jsonschema.ValidationError)
+	return invalid
+}
+
+func requireSchemaRejection(t *testing.T, err error, context string) {
+	t.Helper()
+	if !isSchemaRejection(err) {
+		t.Fatalf("%s: expected schema validation rejection, got %T: %v", context, err, err)
+	}
 }
 
 func TestFullCorpusModelIndex(t *testing.T) {
@@ -121,9 +139,7 @@ func TestFullCorpusSemantics(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, bad := range invalid {
-				if err := tc.model.UnmarshalJSON(bad); err == nil {
-					t.Fatalf("invalid accepted: %s", bad)
-				}
+				requireSchemaRejection(t, tc.model.UnmarshalJSON(bad), "invalid fixture: "+string(bad))
 				after, _ = tc.model.MarshalJSON()
 				if !bytes.Equal(after, raw) {
 					t.Fatal("failed decode mutated model")
@@ -244,15 +260,15 @@ func TestFullCorpusWorkflowAmbiguity(t *testing.T) {
 		for i := range schema.OneOf {
 			if err := r.Validate(fmt.Sprintf("%s/oneOf/%d", id, i), []byte(tc.raw)); err == nil {
 				matches++
+			} else {
+				requireSchemaRejection(t, err, fmt.Sprintf("workflow branch %d for %s", i, tc.raw))
 			}
 		}
 		if matches != tc.matches {
 			t.Fatalf("%s matches=%d want=%d", tc.raw, matches, tc.matches)
 		}
 		var value ModelMetadataIngestionWorkflowAtDefinitionsSourceConfigPropertiesConfigValue
-		if err := value.UnmarshalJSON([]byte(tc.raw)); err == nil {
-			t.Fatal("ambiguous workflow accepted", tc.raw)
-		}
+		requireSchemaRejection(t, value.UnmarshalJSON([]byte(tc.raw)), "ambiguous workflow: "+tc.raw)
 		t.Logf("workflow %s matches=%d, rejected without coercion", tc.raw, matches)
 	}
 }
@@ -279,9 +295,7 @@ func TestFullCorpusCompositionAndPresence(t *testing.T) {
 	if _, ok, err := any.AsAnyOf1(); err != nil || !ok {
 		t.Fatal("nullable anyOf", err)
 	}
-	if err := any.UnmarshalJSON([]byte(`"bad"`)); err == nil {
-		t.Fatal("invalid anyOf")
-	}
+	requireSchemaRejection(t, any.UnmarshalJSON([]byte(`"bad"`)), "invalid anyOf")
 	var all ModelApiLineageOpenlineageOpenLineageDatasetAtDefinitionsOpenLineageInputDatasetValue
 	if err := all.UnmarshalJSON([]byte(`{"namespace":"source","name":"table","vendor":9007199254740993}`)); err != nil {
 		t.Fatal(err)
@@ -289,13 +303,9 @@ func TestFullCorpusCompositionAndPresence(t *testing.T) {
 	if _, ok, err := all.AsAllOf0(); err != nil || !ok {
 		t.Fatal("allOf", err)
 	}
-	if err := all.UnmarshalJSON([]byte(`{"namespace":"source"}`)); err == nil {
-		t.Fatal("allOf required ignored")
-	}
+	requireSchemaRejection(t, all.UnmarshalJSON([]byte(`{"namespace":"source"}`)), "allOf missing required")
 	var conditional ModelApiRdfRdfReasoningJobRequestAtDefinitionsCheckAllOf0Value
-	if err := conditional.UnmarshalJSON([]byte(`{"kind":"SATISFIABILITY"}`)); err == nil {
-		t.Fatal("conditional required ignored")
-	}
+	requireSchemaRejection(t, conditional.UnmarshalJSON([]byte(`{"kind":"SATISFIABILITY"}`)), "conditional missing required")
 	if err := conditional.UnmarshalJSON([]byte(`{"kind":"SATISFIABILITY","classExpression":{"kind":"NAMED_CLASS"}}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -323,9 +333,7 @@ func TestFullCorpusCompositionAndPresence(t *testing.T) {
 			t.Fatal("type array", err)
 		}
 	}
-	if err := total.UnmarshalJSON([]byte(`"bad"`)); err == nil {
-		t.Fatal("type array ignored")
-	}
+	requireSchemaRejection(t, total.UnmarshalJSON([]byte(`"bad"`)), "type array invalid value")
 }
 
 func typedField(t *testing.T, model corpusModel, field string) corpusModel {
@@ -492,9 +500,7 @@ func TestFullCorpusRecursiveComponents(t *testing.T) {
 				t.Fatal("recursive leaf validation", err)
 			}
 			bad := replaceRecursiveLeaf(t, json.RawMessage(tc.raw), tc.steps)
-			if err := tc.model.UnmarshalJSON(bad); err == nil {
-				t.Fatalf("invalid recursive leaf accepted: %s", bad)
-			}
+			requireSchemaRejection(t, tc.model.UnmarshalJSON(bad), "invalid recursive leaf: "+string(bad))
 			raw, _ := tc.model.MarshalJSON()
 			if string(raw) != tc.raw {
 				t.Fatal("typed traversal mutated raw owner")
