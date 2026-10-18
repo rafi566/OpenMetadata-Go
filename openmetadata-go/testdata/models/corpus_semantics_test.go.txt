@@ -1,0 +1,508 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package schema
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	support "github.com/rafi566/OpenMetadata-Go/openmetadata-go/internal/schema"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+type corpusModel interface {
+	UnmarshalJSON([]byte) error
+	MarshalJSON() ([]byte, error)
+	Validate() error
+	JSONValue() support.Value
+}
+
+func TestFullCorpusModelIndex(t *testing.T) {
+	graphRaw, err := os.ReadFile(filepath.Join("..", "testdata", "schemas", "reference-graph.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var graph struct {
+		Nodes     []struct{ Path, Pointer string }
+		Documents []struct{ Path, SHA256 string }
+	}
+	if err = json.Unmarshal(graphRaw, &graph); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile("model-index.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var index []struct{ Path, Pointer, Name, SHA256 string }
+	if err = json.Unmarshal(raw, &index); err != nil {
+		t.Fatal(err)
+	}
+	required := map[string]bool{}
+	for _, node := range graph.Nodes {
+		required[node.Path+"#"+node.Pointer] = true
+	}
+	hashes := map[string]string{}
+	for _, doc := range graph.Documents {
+		hashes[doc.Path] = doc.SHA256
+		source, err := os.ReadFile(filepath.Join("registry", doc.Path))
+		if err != nil || fmt.Sprintf("%x", sha256.Sum256(source)) != doc.SHA256 {
+			t.Fatal("embedded source identity", doc.Path, err)
+		}
+	}
+	names := map[string]bool{}
+	for _, entry := range index {
+		locator := entry.Path + "#" + entry.Pointer
+		if !required[locator] || names[entry.Name] || hashes[entry.Path] != entry.SHA256 {
+			t.Fatal("missing/duplicate/colliding index entry", entry)
+		}
+		names[entry.Name] = true
+		delete(required, locator)
+		filename := "models_" + strings.ToLower(entry.Name) + ".go"
+		source, err := os.ReadFile(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(source, []byte(`"github.com/rafi566/OpenMetadata-Go/openmetadata-go/schema"`)) {
+			t.Fatal("generated schema imports itself", filename)
+		}
+	}
+	if len(required) != 0 || len(index) != len(graph.Nodes) {
+		t.Fatal("incomplete model index", len(required), len(index))
+	}
+	r, err := modelRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Nodes()) != len(index) {
+		t.Fatal("embedded graph differs from index")
+	}
+	t.Logf("all %d model index entries and %d embedded documents match independent graph", len(index), len(hashes))
+}
+
+func corpusFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "testdata", "models", name+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func TestFullCorpusSemantics(t *testing.T) {
+	cases := []struct {
+		name  string
+		model corpusModel
+	}{
+		{"create-table", new(ModelApiDataCreateTableRootValue)},
+		{"table", new(ModelEntityDataTableRootValue)},
+		{"connection", new(ModelEntityServicesConnectionsDatabaseMysqlConnectionRootValue)},
+		{"entity-reference", new(ModelTypeEntityReferenceRootValue)},
+		{"odcs", new(ModelEntityDatacontractOdcsOdcsDataContractRootValue)},
+		{"rdf", new(ModelApiRdfSparqlTripleTermRootValue)},
+		{"test-suite", new(ModelTestsTestSuiteRootValue)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := corpusFixture(t, tc.name)
+			if err := tc.model.UnmarshalJSON(raw); err != nil {
+				t.Fatal(err)
+			}
+			after, err := tc.model.MarshalJSON()
+			if err != nil || !bytes.Equal(after, raw) {
+				t.Fatal("raw roundtrip changed", err)
+			}
+			var invalid []json.RawMessage
+			if err = json.Unmarshal(corpusFixture(t, tc.name+"-invalid"), &invalid); err != nil {
+				t.Fatal(err)
+			}
+			for _, bad := range invalid {
+				if err := tc.model.UnmarshalJSON(bad); err == nil {
+					t.Fatalf("invalid accepted: %s", bad)
+				}
+				after, _ = tc.model.MarshalJSON()
+				if !bytes.Equal(after, raw) {
+					t.Fatal("failed decode mutated model")
+				}
+			}
+			owned := tc.model.JSONValue().RawJSON()
+			owned[0] = '!'
+			after, _ = tc.model.MarshalJSON()
+			if !bytes.Equal(after, raw) {
+				t.Fatal("raw ownership escaped")
+			}
+		})
+	}
+	var table ModelEntityDataTableRootValue
+	if err := table.UnmarshalJSON(corpusFixture(t, "table")); err != nil {
+		t.Fatal(err)
+	}
+	view, ok, err := table.Object()
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	stamp, _ := view.UpdatedAt.Value()
+	number, ok := stamp.NumberValue()
+	if !ok || number.String() != "9007199254740993" {
+		t.Fatal("timestamp precision lost")
+	}
+	columns, _ := view.Columns.Value()
+	items, ok, err := columns.Items()
+	if err != nil || !ok || len(items) != 1 {
+		t.Fatal("columns", err)
+	}
+	column, ok, err := items[0].Object()
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	children, _ := column.Children.Value()
+	nested, ok, err := children.Items()
+	if err != nil || !ok || len(nested) != 1 {
+		t.Fatal("nested columns", err)
+	}
+	child, ok, err := nested[0].Object()
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	name, _ := child.Name.Value()
+	if value, ok := name.StringValue(); !ok || value != "inner" {
+		t.Fatal("nested name")
+	}
+	var connection ModelEntityServicesConnectionsDatabaseMysqlConnectionRootValue
+	if err := connection.UnmarshalJSON(corpusFixture(t, "connection")); err != nil {
+		t.Fatal(err)
+	}
+	cv, ok, err := connection.Object()
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	if cv.Type.IsSet() || cv.Scheme.IsSet() || cv.UseSlowLogs.IsSet() || cv.SchemaFilterPattern.IsSet() {
+		t.Fatal("defaults inserted")
+	}
+	args, _ := cv.ConnectionArguments.Value()
+	values, ok := args.JSONValue().Object()
+	if !ok || len(values) != 3 || !values["null"].IsNull() {
+		t.Fatal("misplaced map annotation narrowed values")
+	}
+	var suite ModelTestsTestSuiteRootValue
+	if err := suite.UnmarshalJSON(corpusFixture(t, "test-suite")); err != nil {
+		t.Fatal(err)
+	}
+	sv, ok, err := suite.Object()
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	sc, _ := sv.Connection.Value()
+	scv, ok, err := sc.Object()
+	if err != nil || !ok || !scv.Config.IsNull() {
+		t.Fatal("TestSuite connection", err)
+	}
+	if _, invented := reflect.TypeOf(scv).FieldByName("ResultSummary"); invented {
+		t.Fatal("annotation invented an instance field")
+	}
+	summaries, _ := sv.TestCaseResultSummary.Value()
+	summaryItems, ok, err := summaries.Items()
+	if err != nil || !ok || len(summaryItems) != 1 {
+		t.Fatal("TestSuite selected raw target", err)
+	}
+	summary, ok, err := summaryItems[0].Object()
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	ts, _ := summary.Timestamp.Value()
+	n, ok := ts.NumberValue()
+	if !ok || n.String() != "9007199254740993" {
+		t.Fatal("TestSuite timestamp")
+	}
+}
+
+func TestFullCorpusWorkflowAmbiguity(t *testing.T) {
+	r, err := modelRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := "https://open-metadata.org/schema/metadataIngestion/workflow.json#/definitions/sourceConfig/properties/config"
+	node, err := r.Resolve(id, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		OneOf []json.RawMessage `json:"oneOf"`
+	}
+	if err = json.Unmarshal(node.Document, &schema); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		raw     string
+		matches int
+	}{{`{}`, 17}, {`{"type":"AutoClassification"}`, 3}} {
+		matches := 0
+		for i := range schema.OneOf {
+			if err := r.Validate(fmt.Sprintf("%s/oneOf/%d", id, i), []byte(tc.raw)); err == nil {
+				matches++
+			}
+		}
+		if matches != tc.matches {
+			t.Fatalf("%s matches=%d want=%d", tc.raw, matches, tc.matches)
+		}
+		var value ModelMetadataIngestionWorkflowAtDefinitionsSourceConfigPropertiesConfigValue
+		if err := value.UnmarshalJSON([]byte(tc.raw)); err == nil {
+			t.Fatal("ambiguous workflow accepted", tc.raw)
+		}
+		t.Logf("workflow %s matches=%d, rejected without coercion", tc.raw, matches)
+	}
+}
+
+func TestFullCorpusCompositionAndPresence(t *testing.T) {
+	var any ModelAnalyticsReportDataTypeAggregatedCostAnalysisReportDataAtDefinitionsDataAssetValuesPropertiesThreeDaysValue
+	if err := any.UnmarshalJSON([]byte("9007199254740993")); err != nil {
+		t.Fatal(err)
+	}
+	branch, ok, err := any.AsAnyOf0()
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	n, ok := branch.NumberValue()
+	if !ok || n.String() != "9007199254740993" {
+		t.Fatal("anyOf precision")
+	}
+	if _, ok, err := any.AsAnyOf1(); err != nil || ok {
+		t.Fatal("wrong anyOf branch", err)
+	}
+	if err := any.UnmarshalJSON([]byte("null")); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := any.AsAnyOf1(); err != nil || !ok {
+		t.Fatal("nullable anyOf", err)
+	}
+	if err := any.UnmarshalJSON([]byte(`"bad"`)); err == nil {
+		t.Fatal("invalid anyOf")
+	}
+	var all ModelApiLineageOpenlineageOpenLineageDatasetAtDefinitionsOpenLineageInputDatasetValue
+	if err := all.UnmarshalJSON([]byte(`{"namespace":"source","name":"table","vendor":9007199254740993}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := all.AsAllOf0(); err != nil || !ok {
+		t.Fatal("allOf", err)
+	}
+	if err := all.UnmarshalJSON([]byte(`{"namespace":"source"}`)); err == nil {
+		t.Fatal("allOf required ignored")
+	}
+	var conditional ModelApiRdfRdfReasoningJobRequestAtDefinitionsCheckAllOf0Value
+	if err := conditional.UnmarshalJSON([]byte(`{"kind":"SATISFIABILITY"}`)); err == nil {
+		t.Fatal("conditional required ignored")
+	}
+	if err := conditional.UnmarshalJSON([]byte(`{"kind":"SATISFIABILITY","classExpression":{"kind":"NAMED_CLASS"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := conditional.UnmarshalJSON([]byte(`{"kind":"OTHER"}`)); err != nil {
+		t.Fatal("inactive then", err)
+	}
+	var progress ModelEntityServicesIngestionPipelinesProgressUpdateAtDefinitionsProgressNodeValue
+	if err := progress.UnmarshalJSON([]byte(`{"expected":null,"processed":0,"children":[]}`)); err != nil {
+		t.Fatal(err)
+	}
+	view, ok, err := progress.Object()
+	if err != nil || !ok || !view.Expected.IsNull() || !view.Processed.IsSet() {
+		t.Fatal("null/zero presence", err)
+	}
+	if err := progress.UnmarshalJSON([]byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	view, _, _ = progress.Object()
+	if view.Expected.IsSet() || view.Processed.IsSet() || view.Children.IsSet() {
+		t.Fatal("reuse/default absence")
+	}
+	var total ModelEntityServicesIngestionPipelinesProgressUpdateAtDefinitionsProgressNodePropertiesExpectedValue
+	for _, raw := range []string{"null", "9007199254740993"} {
+		if err := total.UnmarshalJSON([]byte(raw)); err != nil {
+			t.Fatal("type array", err)
+		}
+	}
+	if err := total.UnmarshalJSON([]byte(`"bad"`)); err == nil {
+		t.Fatal("type array ignored")
+	}
+}
+
+func typedField(t *testing.T, model corpusModel, field string) corpusModel {
+	t.Helper()
+	method := reflect.ValueOf(model).MethodByName("Object")
+	if !method.IsValid() {
+		t.Fatalf("%T missing Object", model)
+	}
+	view := method.Call(nil)
+	if !view[1].Bool() || !view[2].IsNil() {
+		t.Fatalf("%T object projection: %v", model, view)
+	}
+	member := view[0].FieldByName(field)
+	if !member.IsValid() {
+		t.Fatalf("%T missing field %s", model, field)
+	}
+	optional := member.MethodByName("Value").Call(nil)
+	if !optional[1].Bool() {
+		t.Fatal("missing recursive value", field)
+	}
+	child, ok := optional[0].Interface().(corpusModel)
+	if !ok {
+		t.Fatalf("nonmodel typed child %s", field)
+	}
+	return child
+}
+
+func typedItem(t *testing.T, model corpusModel) corpusModel {
+	t.Helper()
+	method := reflect.ValueOf(model).MethodByName("Items")
+	if !method.IsValid() {
+		t.Fatalf("%T missing Items", model)
+	}
+	out := method.Call(nil)
+	if !out[1].Bool() || !out[2].IsNil() || out[0].Len() == 0 {
+		t.Fatalf("%T array projection: %v", model, out)
+	}
+	return out[0].Index(0).Interface().(corpusModel)
+}
+
+func replaceRecursiveLeaf(t *testing.T, raw json.RawMessage, steps []string) json.RawMessage {
+	t.Helper()
+	if len(steps) == 0 {
+		return json.RawMessage("null")
+	}
+	step := steps[0]
+	if strings.HasPrefix(step, "As") {
+		return replaceRecursiveLeaf(t, raw, steps[1:])
+	}
+	if step == "[]" {
+		var values []json.RawMessage
+		if err := json.Unmarshal(raw, &values); err != nil || len(values) == 0 {
+			t.Fatal("invalid witness array", err)
+		}
+		values[0] = replaceRecursiveLeaf(t, values[0], steps[1:])
+		out, err := json.Marshal(values)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	var values map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &values); err != nil {
+		t.Fatal(err)
+	}
+	key := strings.ToLower(step[:1]) + step[1:]
+	if values[key] == nil {
+		t.Fatal("invalid witness property", key)
+	}
+	values[key] = replaceRecursiveLeaf(t, values[key], steps[1:])
+	out, err := json.Marshal(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestFullCorpusRecursiveComponents(t *testing.T) {
+	uuid := "123e4567-e89b-12d3-a456-426614174000"
+	hierarchy := `{"id":"` + uuid + `","name":"parent","description":"kept","children":[{"id":"` + uuid + `","name":"child","description":"kept"}]}`
+	rdf := `{"type":"triple","value":{"subject":{"type":"uri","value":"https://example.test/s"},"predicate":{"type":"uri","value":"https://example.test/p"},"object":{"type":"literal","value":"leaf"}}}`
+	cases := []struct {
+		locator string
+		model   corpusModel
+		raw     string
+		steps   []string
+	}{
+		{"api/data/columnGridResponse.json#/definitions/columnChild", new(ModelApiDataColumnGridResponseAtDefinitionsColumnChildValue), `{"name":"parent","children":[{"name":"child"}]}`, []string{"Children", "[]"}},
+		{"api/rdf/agentSparqlResponse.json#/definitions/rdfTerm", new(ModelApiRdfAgentSparqlResponseAtDefinitionsRdfTermValue), rdf, []string{"Value", "AsOneOf1", "Object"}},
+		{"api/rdf/sparqlResponse.json#/definitions/rdfTerm", new(ModelApiRdfSparqlResponseAtDefinitionsRdfTermValue), rdf, []string{"Value", "AsOneOf1", "Object"}},
+		{"entity/data/pageHierarchy.json#", new(ModelEntityDataPageHierarchyRootValue), hierarchy, []string{"Children", "[]"}},
+		{"entity/data/searchIndex.json#/definitions/searchIndexField", new(ModelEntityDataSearchIndexAtDefinitionsSearchIndexFieldValue), `{"name":"parent","dataType":"OBJECT","children":[{"name":"child","dataType":"TEXT"}]}`, []string{"Children", "[]"}},
+		{"entity/data/table.json#/definitions/column", new(ModelEntityDataTableAtDefinitionsColumnValue), `{"name":"parent","dataType":"STRUCT","children":[{"name":"child","dataType":"INT"}]}`, []string{"Children", "[]"}},
+		{"entity/datacontract/odcs/odcsDataContract.json#/definitions/odcsSchemaElement", new(ModelEntityDatacontractOdcsOdcsDataContractAtDefinitionsOdcsSchemaElementValue), `{"name":"parent","properties":[{"name":"child","items":{"name":"leaf"}}]}`, []string{"Properties", "[]", "Items"}},
+		{"entity/services/ingestionPipelines/progressUpdate.json#/definitions/progressNode", new(ModelEntityServicesIngestionPipelinesProgressUpdateAtDefinitionsProgressNodeValue), `{"label":"parent","children":[{"label":"child","expected":null}]}`, []string{"Children", "[]"}},
+		{"entity/teams/teamHierarchy.json#", new(ModelEntityTeamsTeamHierarchyRootValue), hierarchy, []string{"Children", "[]"}},
+		{"system/ui/navigationItem.json#", new(ModelSystemUiNavigationItemRootValue), `{"id":"` + uuid + `","title":"parent","pageId":"page","children":[{"id":"` + uuid + `","title":"child","pageId":"page"}]}`, []string{"Children", "[]"}},
+		{"type/entityHierarchy.json#", new(ModelTypeEntityHierarchyRootValue), hierarchy, []string{"Children", "[]"}},
+		{"type/ontologyExpression.json#", new(ModelTypeOntologyExpressionRootValue), `{"kind":"INTERSECTION","operands":[{"kind":"RESTRICTION","filler":{"kind":"NAMED_CLASS"}}]}`, []string{"Operands", "[]", "Filler"}},
+		{"type/reaction.json#/definitions/reactionList", new(ModelTypeReactionAtDefinitionsReactionListValue), `[{"reactionType":"thumbsUp","user":{"id":"` + uuid + `","type":"user"}}]`, []string{"[]", "User"}},
+		{"type/schema.json#/definitions/field", new(ModelTypeSchemaAtDefinitionsFieldValue), `{"name":"parent","dataType":"RECORD","children":[{"name":"child","dataType":"STRING"}]}`, []string{"Children", "[]"}},
+	}
+	graphRaw, err := os.ReadFile(filepath.Join("..", "testdata", "schemas", "reference-graph.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var graph struct {
+		Components [][]string `json:"recursive_components"`
+	}
+	if err = json.Unmarshal(graphRaw, &graph); err != nil {
+		t.Fatal(err)
+	}
+	covered := map[int]bool{}
+	for _, tc := range cases {
+		t.Run(tc.locator, func(t *testing.T) {
+			component := -1
+			for i, members := range graph.Components {
+				for _, member := range members {
+					if member == tc.locator {
+						component = i
+					}
+				}
+			}
+			if component < 0 || covered[component] {
+				t.Fatal("unmatched/duplicate component witness", tc.locator)
+			}
+			covered[component] = true
+			if err := tc.model.UnmarshalJSON([]byte(tc.raw)); err != nil {
+				t.Fatal(err)
+			}
+			current := tc.model
+			expected := tc.model.JSONValue()
+			for _, step := range tc.steps {
+				if step == "[]" {
+					current = typedItem(t, current)
+					values, ok := expected.Array()
+					if !ok || len(values) == 0 {
+						t.Fatal("missing raw witness array")
+					}
+					expected = values[0]
+				} else if strings.HasPrefix(step, "As") {
+					method := reflect.ValueOf(current).MethodByName(step)
+					if !method.IsValid() {
+						t.Fatal("missing branch view", step)
+					}
+					out := method.Call(nil)
+					if !out[1].Bool() || !out[2].IsNil() {
+						t.Fatal("recursive branch", out)
+					}
+					current = out[0].Interface().(corpusModel)
+				} else {
+					current = typedField(t, current, step)
+					values, ok := expected.Object()
+					if !ok {
+						t.Fatal("missing raw witness object")
+					}
+					expected = values[strings.ToLower(step[:1])+step[1:]]
+				}
+			}
+			if !bytes.Equal(current.JSONValue().RawJSON(), expected.RawJSON()) {
+				t.Fatal("typed recursive view reached the wrong raw value")
+			}
+			if err := current.Validate(); err != nil {
+				t.Fatal("recursive leaf validation", err)
+			}
+			bad := replaceRecursiveLeaf(t, json.RawMessage(tc.raw), tc.steps)
+			if err := tc.model.UnmarshalJSON(bad); err == nil {
+				t.Fatalf("invalid recursive leaf accepted: %s", bad)
+			}
+			raw, _ := tc.model.MarshalJSON()
+			if string(raw) != tc.raw {
+				t.Fatal("typed traversal mutated raw owner")
+			}
+			t.Logf("SCC %d (%d members): traversed %d typed steps to %T", component, len(graph.Components[component]), len(tc.steps), current)
+		})
+	}
+	if len(covered) != 14 || len(covered) != len(graph.Components) {
+		t.Fatal("recursive component witness coverage", len(covered))
+	}
+}

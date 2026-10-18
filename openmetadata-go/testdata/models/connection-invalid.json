@@ -1,0 +1,28 @@
+[
+  {
+    "username": "reader"
+  },
+  {
+    "username": "reader",
+    "hostPort": "db.example:3306",
+    "connectionArguments": {
+      "large": 9007199254740993,
+      "null": null,
+      "nested": {
+        "flag": false
+      }
+    },
+    "type": "Postgres"
+  },
+  {
+    "username": "reader",
+    "hostPort": 42,
+    "connectionArguments": {
+      "large": 9007199254740993,
+      "null": null,
+      "nested": {
+        "flag": false
+      }
+    }
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "username": "reader",
+  "hostPort": "db.example:3306",
+  "connectionArguments": {
+    "large": 9007199254740993,
+    "null": null,
+    "nested": {
+      "flag": false
+    }
+  }
+}
