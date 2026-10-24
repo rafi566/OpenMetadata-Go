@@ -75,3 +75,11 @@ python scripts/backend_benchmark/run.py smoke-go-fallback-01 10 20 \
 ```
 
 This short cold run verifies integration and aggregate accounting only. Performance qualification still needs warmed repeated runs and a capacity boundary after business logic has actually moved to Go.
+
+## Experimental native table detail
+
+Build `bettermetadata-go:table-reads` from `openmetadata-go/`, then append `go-table-reads.yaml` to the three files above. It enables admin-only native plain-table reads against the pinned Java revision, using the same aggregate API budget. PostgreSQL credentials come from the ignored local environment file; plaintext database traffic is confined to this disposable Docker network.
+
+Non-admins and all unsupported fields/metadata retain Java fallback. The office Helm profile uses Java until the experimental slice qualifies. See the exact supported cases and read-only/payload/concurrency bounds in [the Go README](../../openmetadata-go/README.md).
+
+`restore.ps1` now stops and resumes a running gateway along with Java, preventing its PostgreSQL pool from surviving a fixture reset. Failed load/gateway inventory commands abort before mutation. Restore after mutation tests, then use fresh warmup/measurement labels and both API container names as above.

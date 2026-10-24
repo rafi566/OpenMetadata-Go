@@ -1,0 +1,11 @@
+services:
+  gateway:
+    image: bettermetadata-go:table-reads
+    environment:
+      GO_TABLE_READS_ENABLED: "true"
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: openmetadata_benchmark
+      PGUSER: benchmark
+      PGPASSWORD: ${BENCHMARK_DB_PASSWORD:?Generate a local database password}
+      PGSSLMODE: disable
