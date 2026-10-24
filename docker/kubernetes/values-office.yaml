@@ -1,0 +1,144 @@
+# Official open-metadata/openmetadata chart 2.0.0. See README.md before filling placeholders.
+fullnameOverride: openmetadata
+replicaCount: 1
+hpa:
+  enabled: false
+image:
+  repository: REPLACE_ME_REGISTRY/openmetadata-server
+  tag: REPLACE_ME_FORK_COMMIT_TAG
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+openmetadata:
+  config:
+    logLevel: INFO
+    clusterName: office-staging
+    database:
+      enabled: true
+      host: REPLACE_ME_POSTGRES_HOST
+      port: 5432
+      driverClass: org.postgresql.Driver
+      dbScheme: postgresql
+      databaseName: REPLACE_ME_POSTGRES_DATABASE
+      dbParams: sslmode=verify-full&sslrootcert=/etc/openmetadata/ca/postgres-ca.crt
+      maxSize: 20
+      minSize: 2
+      initialSize: 2
+      auth:
+        username: REPLACE_ME_POSTGRES_USER
+        password:
+          secretRef: REPLACE_ME_POSTGRES_SECRET
+          secretKey: password
+    elasticsearch:
+      enabled: true
+      searchType: opensearch
+      host: REPLACE_ME_OPENSEARCH_HOST
+      port: 9200
+      scheme: https
+      clusterAlias: office_staging
+      batchSize: 50
+      auth:
+        enabled: true
+        username: REPLACE_ME_OPENSEARCH_USER
+        password:
+          secretRef: REPLACE_ME_OPENSEARCH_SECRET
+          secretKey: password
+      trustStore:
+        enabled: true
+        path: /etc/openmetadata/ca/opensearch-truststore.p12
+        password:
+          secretRef: REPLACE_ME_OPENSEARCH_SECRET
+          secretKey: truststore-password
+    fernetkey:
+      secretRef: REPLACE_ME_RUNTIME_SECRET
+      secretKey: fernet-key
+    jwtTokenConfiguration:
+      enabled: true
+      rsapublicKeyFilePath: /etc/openmetadata/jwt/public_key.der
+      rsaprivateKeyFilePath: /etc/openmetadata/jwt/private_key.der
+      jwtissuer: office-openmetadata
+      keyId: REPLACE_ME_JWT_KEY_ID
+    pipelineServiceClientConfig:
+      enabled: true
+      type: k8s
+      metadataApiEndpoint: http://openmetadata:8585/api
+      k8s:
+        namespace: ""
+        serviceAccountName: openmetadata-ingestion
+        ingestionImage: REPLACE_ME_REGISTRY/openmetadata-ingestion:REPLACE_ME_FORK_COMMIT_TAG
+        useOMJobOperator: false
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 2Gi
+    deployPipelinesConfig:
+      enabled: false
+    reindexConfig:
+      enabled: false
+omjobOperator:
+  enabled: false
+
+# Initial measurement budget; tune only against comparable load-test results.
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+extraEnvs:
+  - name: OPENMETADATA_HEAP_OPTS
+    value: -Xms256m -Xmx1g
+  - name: ENTITY_CACHE_MAX_SIZE_BYTES
+    value: "67108864"
+  - name: DB_CONNECTION_POOL_MIN_IDLE
+    value: "2"
+  - name: QOS_MAX_REQUEST_COUNT
+    value: "16"
+  - name: QOS_MAX_SUSPENDED_REQUEST_COUNT
+    value: "64"
+  - name: SEMANTIC_SEARCH_ENABLED
+    value: "false"
+
+extraVolumes:
+  - name: office-ca
+    secret:
+      secretName: REPLACE_ME_CA_SECRET
+      items:
+        - key: postgres-ca.crt
+          path: postgres-ca.crt
+        - key: opensearch-ca.crt
+          path: opensearch-ca.crt
+        - key: opensearch-truststore.p12
+          path: opensearch-truststore.p12
+  - name: jwt-keys
+    secret:
+      secretName: REPLACE_ME_JWT_SECRET
+      items:
+        - key: public_key.der
+          path: public_key.der
+        - key: private_key.der
+          path: private_key.der
+extraVolumeMounts:
+  - name: office-ca
+    mountPath: /etc/openmetadata/ca
+    readOnly: true
+  - name: jwt-keys
+    mountPath: /etc/openmetadata/jwt
+    readOnly: true
+
+service:
+  type: ClusterIP
+ingress:
+  enabled: false
+serviceMonitor:
+  enabled: false
+startupProbe:
+  httpGet:
+    path: /healthcheck
+    port: http-admin
+  periodSeconds: 10
+  failureThreshold: 60

@@ -25,6 +25,9 @@ verdict cites an artifact that was checked to still exist):
 
 ## Backend & platform design docs (`docs/`)
 
+Office Kubernetes preparation with external PostgreSQL and OpenSearch 2.19.x:
+[`docker/kubernetes/README.md`](../docker/kubernetes/README.md) contains the Helm values, Secret/CA requirements, preflight and verification commands.
+
 | Doc | Purpose | Read when | Modified | Freshness |
 |---|---|---|---|---|
 | `docs/impersonation-design.md` | Bot→user impersonation: `updatedBy`=user / `impersonatedBy`=bot, gated by `allowImpersonation` + RBAC `Impersonate` policy scoping | Touching bot impersonation auth — the flag, `BotImpersonationPolicy` seeds, `checkImpersonationAuthorization` (§4.4 is authoritative) | 2026-06-16 | CURRENT ⚠¹ |
