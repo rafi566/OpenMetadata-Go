@@ -1,0 +1,17 @@
+services:
+  api:
+    mem_limit: 1984m
+    cpus: 1.5
+  gateway:
+    image: bettermetadata-go:gateway
+    mem_limit: 64m
+    cpus: 0.5
+    environment:
+      JAVA_BACKEND_URL: http://api:8585
+      GOMEMLIMIT: 48MiB
+      GOMAXPROCS: "1"
+    ports:
+      - 127.0.0.1:18587:8585
+    depends_on:
+      api:
+        condition: service_started

@@ -47,6 +47,7 @@ Office Kubernetes preparation with external PostgreSQL and OpenSearch 2.19.x:
 | `docs/auto-classification/model-provisioning.md` | Provision spaCy models for Auto Classification before a workflow runs | Building an air-gapped classification environment or a tailored ingestion image | 2026-09-22 | CURRENT |
 | `docs/perf/lineage-scale-validation.md` | Lineage scene p95 + first-render benchmark: what each scenario measures, why cold vs warm differs, the `jpw.lineage.*` knobs, and how to compare two releases | Running or reading the lineage scale benchmark — `LineageScenePerformanceScaleIT`, `scripts/lineage-scale-benchmark.sh`, `compare_benchmark_metrics.py`; evaluating #32050 | 2026-09-23 | CURRENT (no numbers published yet) |
 | `docs/perf/cdn-deployment-guide.md` | AWS design proposal: per-customer/per-release UI bundles from one CloudFront + S3 via an embedded CloudFront Function router (no Lambda@Edge) | Planning/reviewing CDN delivery of the UI bundle + per-customer version pinning — infra design, not existing code | 2026-05-25 | CURRENT (unimplemented proposal) |
+| `docs/perf/backend-java-go.md` | Repeated Java RAM/CPU measurements, Go fallback compatibility and the shared resource budget | Continuing the incremental backend migration; capacity and overall improvement targets remain unverified | 2026-10-24 | CURRENT (work in progress) |
 
 ## Decision records (`docs/decisions/`)
 
