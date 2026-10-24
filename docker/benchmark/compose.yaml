@@ -1,0 +1,101 @@
+name: bettermetadata-benchmark
+
+services:
+  java-build:
+    profiles: [build]
+    image: maven:3.9.12-eclipse-temurin-21@sha256:c3c9d3ac4ce8431a3995c0318b8d390f448e693dd4fabc16e9b68d2e1f3d7b46
+    user: "1000:1000"
+    working_dir: /source
+    mem_limit: 2g
+    cpus: 2
+    environment:
+      MAVEN_OPTS: -Xmx1024m -Duser.home=/tmp
+      BASELINE_SOURCE_SHA: f38e3487c729fe4663269bd367ed9a853fa9d3e6
+    volumes:
+      - ${BENCHMARK_SOURCE_DIR:?Set the unmodified baseline checkout}:/source
+      - ${BENCHMARK_M2_DIR:?Set a writable Maven cache directory}:/maven-cache
+      - ../../scripts/backend_benchmark:/benchmark:ro
+      - ./build-java.sh:/build-java.sh:ro
+    entrypoint: [bash, /build-java.sh]
+
+  postgres:
+    image: postgres:15.19-alpine@sha256:a8e042598834300dfaa17a54f695b87b7f25d3490433bbbe2ef3bffbb9747f24
+    mem_limit: 512m
+    cpus: 2
+    environment:
+      POSTGRES_DB: openmetadata_benchmark
+      POSTGRES_USER: benchmark
+      POSTGRES_PASSWORD: ${BENCHMARK_DB_PASSWORD:?Generate a local database password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-postgres.sql:/docker-entrypoint-initdb.d/benchmark.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U benchmark -d openmetadata_benchmark"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.7@sha256:1f81bb6a552637d6f551baeb8d8fad5ed969a0577374e76af14d1131ab750cd9
+    mem_limit: 1536m
+    cpus: 2
+    environment:
+      discovery.type: single-node
+      path.repo: /usr/share/opensearch/snapshots
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - search-data:/usr/share/opensearch/data
+      - search-snapshots:/usr/share/opensearch/snapshots
+    healthcheck:
+      test: [CMD-SHELL, "curl -fsS http://localhost:9200/_cluster/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  api:
+    image: eclipse-temurin:21-jre@sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99
+    working_dir: /source
+    mem_limit: 2g
+    cpus: 2
+    environment:
+      JAVA_TOOL_OPTIONS: ${BENCHMARK_JAVA_OPTS:--Xms1g -Xmx1g}
+      DB_DRIVER_CLASS: org.postgresql.Driver
+      DB_SCHEME: postgresql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      OM_DATABASE: openmetadata_benchmark
+      DB_USER: benchmark
+      DB_USER_PASSWORD: ${BENCHMARK_DB_PASSWORD:?Generate a local database password}
+      DB_PARAMS: sslmode=disable
+      SEARCH_TYPE: opensearch
+      ELASTICSEARCH_HOST: opensearch
+      ELASTICSEARCH_CLUSTER_ALIAS: benchmark
+      PIPELINE_SERVICE_CLIENT_ENABLED: "false"
+      FERNET_KEY: ${BENCHMARK_FERNET_KEY:?Generate a local Fernet key}
+      AWS_EC2_METADATA_DISABLED: "true"
+    volumes:
+      - ${BENCHMARK_SOURCE_DIR:?Set the unmodified baseline checkout}:/source:ro
+      - api-logs:/source/logs
+    ports:
+      - 127.0.0.1:18585:8585
+      - 127.0.0.1:18586:8586
+    command:
+      - java
+      - -cp
+      - /source/target/benchmark-provided/*:/source/openmetadata-service/target/classes:/source/target/benchmark-libs/*
+      - org.openmetadata.service.OpenMetadataApplication
+      - server
+      - /source/conf/openmetadata.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  search-data:
+  search-snapshots:
+  api-logs:
