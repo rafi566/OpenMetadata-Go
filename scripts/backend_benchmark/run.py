@@ -70,6 +70,9 @@ def info(name):
         "QOS_MAX_SUSPENDED_REQUEST_COUNT",
         "ELASTICSEARCH_BATCH_SIZE",
         "SEMANTIC_SEARCH_ENABLED",
+        "GO_TABLE_READS_ENABLED",
+        "GOMEMLIMIT",
+        "GOMAXPROCS",
     }
     return {
         "id": data["Id"],

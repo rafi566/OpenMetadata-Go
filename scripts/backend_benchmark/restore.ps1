@@ -15,11 +15,23 @@ function Invoke-FixtureDocker {
     return $taskOutput
 }
 
-$taskLoads = @(& $taskCli @taskPrefix ps --filter 'name=bettermetadata-load-' --format '{{.Names}}')
+$taskLoads = @(Invoke-FixtureDocker -CommandArgs @('ps','--filter','name=bettermetadata-load-','--format','{{.Names}}'))
 if ($taskLoads.Count -ne 0) { throw 'A load generator is still running; refusing to reset its fixture.' }
 foreach ($taskName in @('bettermetadata-benchmark-api-1','bettermetadata-benchmark-postgres-1','bettermetadata-benchmark-opensearch-1')) {
     $taskProject = Invoke-FixtureDocker -CommandArgs @('inspect',$taskName,'--format','{{index .Config.Labels "com.docker.compose.project"}}')
     if ($taskProject -ne 'bettermetadata-benchmark') { throw ('Unexpected container ownership: ' + $taskName) }
+}
+$taskRunningApis = @('bettermetadata-benchmark-api-1')
+$taskGateway = 'bettermetadata-benchmark-gateway-1'
+$taskGateways = @(Invoke-FixtureDocker -CommandArgs @('ps','--all','--filter',('name=^/' + $taskGateway + '$'),'--format','{{.Names}}'))
+if ($taskGateways.Count -gt 1 -or ($taskGateways.Count -eq 1 -and $taskGateways[0] -ne $taskGateway)) { throw 'Unexpected gateway inventory.' }
+$taskResumeGateway = $false
+if ($taskGateways.Count -eq 1) {
+    $taskGatewayProject = Invoke-FixtureDocker -CommandArgs @('inspect',$taskGateway,'--format','{{index .Config.Labels "com.docker.compose.project"}}')
+    if ($taskGatewayProject -ne 'bettermetadata-benchmark') { throw ('Unexpected container ownership: ' + $taskGateway) }
+    $taskGatewayRunning = Invoke-FixtureDocker -CommandArgs @('inspect',$taskGateway,'--format','{{.State.Running}}')
+    $taskResumeGateway = $taskGatewayRunning -eq 'true'
+    if ($taskResumeGateway) { $taskRunningApis += $taskGateway }
 }
 $taskDump = Join-Path $taskResults 'private\catalog-v1.dump'
 $taskDumpHash = (Get-FileHash -LiteralPath $taskDump -Algorithm SHA256).Hash
@@ -37,7 +49,7 @@ $taskAvailable = $taskAvailableSnapshots[0]
 if ($taskAvailable.uuid -ne $taskSavedSnapshot.uuid -or $taskAvailable.state -ne 'SUCCESS' -or $taskAvailable.shards.failed -ne 0 -or $taskAvailable.shards.successful -ne $taskSavedSnapshot.shards.successful -or ((@($taskAvailable.indices | Sort-Object) -join "`n") -ne (@($taskSavedSnapshot.indices | Sort-Object) -join "`n")) -or ((@($taskAvailable.data_streams | Sort-Object) -join "`n") -ne (@($taskSavedSnapshot.data_streams | Sort-Object) -join "`n"))) {
     throw 'The available search snapshot differs from the saved fixture.'
 }
-Invoke-FixtureDocker -CommandArgs @('stop','--time','20','bettermetadata-benchmark-api-1') | Out-Null
+Invoke-FixtureDocker -CommandArgs (@('stop','--timeout','35') + $taskRunningApis) | Out-Null
 Invoke-FixtureDocker -CommandArgs @('cp',$taskDump,'bettermetadata-benchmark-postgres-1:/tmp/benchmark-restore.dump') | Out-Null
 Invoke-FixtureDocker -CommandArgs @('exec','bettermetadata-benchmark-postgres-1','pg_restore','--list','/tmp/benchmark-restore.dump') | Out-Null
 Invoke-FixtureDocker -CommandArgs @('exec','bettermetadata-benchmark-postgres-1','dropdb','-U','benchmark','--maintenance-db=postgres','--force','--if-exists','openmetadata_benchmark') | Out-Null
@@ -80,6 +92,7 @@ while ($taskClock.Elapsed.TotalSeconds -lt 60) {
     Start-Sleep -Milliseconds 500
 }
 if (!$taskReady) { throw 'The API did not become ready in the observation window.' }
+if ($taskResumeGateway) { Invoke-FixtureDocker -CommandArgs @('start',$taskGateway) | Out-Null }
 $taskLoginBody = @{email='admin@open-metadata.org';password='YWRtaW4='} | ConvertTo-Json -Compress
 $taskLogin = Invoke-RestMethod -Uri 'http://127.0.0.1:18585/api/v1/users/login' -Method Post -ContentType 'application/json' -Body $taskLoginBody -TimeoutSec 15
 if (!$taskLogin.accessToken) { throw 'Fresh fixture login failed.' }
@@ -102,7 +115,8 @@ $taskEvidence = [pscustomobject]@{
     RestoreId=$taskRestoreId;CompletedUtc=[DateTime]::UtcNow.ToString('o');
     PostgreSQLDumpSha256=$taskDumpHash;Tables=$taskCatalog.paging.total;
     SearchShards=$taskSearchRestore.snapshot.shards.successful;
-    TableVersion=$taskTable.version;StoresConsistent=$true;FreshLogin=$true
+    TableVersion=$taskTable.version;StoresConsistent=$true;FreshLogin=$true;
+    RestartedApiContainers=$taskRunningApis
 }
 $taskEvidence | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $taskResults ('private\restore-' + $taskRestoreId + '.json'))
 $taskEvidence | ConvertTo-Json

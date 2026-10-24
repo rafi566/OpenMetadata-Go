@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $taskRestoreScript = Join-Path $PSScriptRoot 'restore.ps1'
-foreach ($taskCase in @('missing', 'malformed', 'unavailable')) {
+foreach ($taskCase in @('missing', 'malformed', 'unavailable', 'foreign-gateway', 'failed-load-inventory', 'failed-gateway-inventory')) {
     & {
         $taskCalls = [Collections.Generic.List[string]]::new()
         function Get-Command {
@@ -30,8 +30,15 @@ foreach ($taskCase in @('missing', 'malformed', 'unavailable')) {
         function Invoke-FakeDocker {
             $taskCalls.Add(($args -join ' '))
             $global:LASTEXITCODE = 0
-            if ($args -contains 'ps') { return }
-            if ($args -contains 'inspect') { return 'bettermetadata-benchmark' }
+            if ($args -contains 'ps') {
+                if (($taskCase -eq 'failed-gateway-inventory' -and $args -contains '--all') -or ($taskCase -eq 'failed-load-inventory' -and $args -notcontains '--all')) { $global:LASTEXITCODE = 125; return }
+                if ($taskCase -eq 'foreign-gateway' -and $args -contains '--all') { return 'bettermetadata-benchmark-gateway-1' }
+                return
+            }
+            if ($args -contains 'inspect') {
+                if ($taskCase -eq 'foreign-gateway' -and $args -contains 'bettermetadata-benchmark-gateway-1') { return 'another-project' }
+                return 'bettermetadata-benchmark'
+            }
             if (($args -join ' ') -match '/_snapshot/benchmark_fixture/catalog-v1$') {
                 $global:LASTEXITCODE = 22
                 return 'Snapshot is unavailable'
@@ -39,10 +46,13 @@ foreach ($taskCase in @('missing', 'malformed', 'unavailable')) {
             throw 'A mutating Docker command was attempted'
         }
         $taskRejected = $false
-        try { & $taskRestoreScript } catch { $taskRejected = $true }
+        $taskRejection = ''
+        try { & $taskRestoreScript } catch { $taskRejected = $true; $taskRejection = $_.Exception.Message }
+        if ($taskCase -eq 'foreign-gateway' -and $taskRejection -notlike 'Unexpected container ownership:*') { throw 'Foreign gateway was not rejected by the ownership guard.' }
+        if ($taskCase -like 'failed-*-inventory' -and ($taskCalls[-1] -notmatch ' ps ' -or $taskRejection -notlike 'Fixture Docker command failed;*')) { throw ('Restore continued after inventory failed: ' + $taskCase) }
         if (!$taskRejected -or @($taskCalls | Where-Object {$_ -match ' stop |dropdb|createdb|pg_restore|DELETE'}).Count) {
             throw ('Unsafe restore preflight for ' + $taskCase + ': ' + ($taskCalls -join '; '))
         }
-        Write-Output ('PASS: ' + $taskCase + ' search snapshot prevents fixture mutations')
+        Write-Output ('PASS: ' + $taskCase + ' preflight prevents fixture mutations')
     }
 }

@@ -7,12 +7,14 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/rafi566/OpenMetadata-Go/openmetadata-go/internal/gateway"
+	"github.com/rafi566/OpenMetadata-Go/openmetadata-go/internal/tableread"
 )
 
 func main() {
@@ -28,6 +30,22 @@ func run() error {
 		return err
 	}
 	defer proxy.Transport.(*http.Transport).CloseIdleConnections()
+	var handler http.Handler = proxy
+	if os.Getenv("GO_TABLE_READS_ENABLED") == "true" {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		store, err := tableread.Open(ctx)
+		cancel()
+		if err != nil {
+			return err
+		}
+		defer store.Pool.Close()
+		origin, _ := url.Parse(os.Getenv("JAVA_BACKEND_URL"))
+		handler = &tableread.Handler{
+			Java:     origin,
+			Client:   &http.Client{Transport: proxy.Transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+			Fallback: proxy, Read: store.Read,
+		}
+	}
 	address := os.Getenv("HTTP_ADDR")
 	if address == "" {
 		address = ":8585"
@@ -39,5 +57,5 @@ func run() error {
 	defer listener.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return serve(ctx, listener, proxy, 30*time.Second)
+	return serve(ctx, listener, handler, 30*time.Second)
 }
