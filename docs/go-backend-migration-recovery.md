@@ -15,20 +15,28 @@ matches the original commit above. The public `go/full-backend-source-backup` br
 `e424f06c30acddae4b928c3611c4f2067198f4b8` has the same source tree.
 
 Current public design/plan work continues on `go/partitioned-model-generation`.
-The initial plan checkpoint is commit
-`db13f235e5dd0d244bd746363cfb32be371f484b`; its normal push and exact remote head
-were verified. This branch retains the recovered original product history.
-Read its latest reviewed commits before choosing a resume point.
+The latest reviewed design checkpoint is commit
+`63952bd5e5d1e140edd7916d134366a3c0254b33`; its normal push and exact remote head
+were verified. The four source/tool helper scripts were accepted at
+`6ffd32aabbdcaa6682cfb26db25a37bcbd25ed39` after31 Python checks and independent
+review. The newer host/fixture supervision design has passed review; its P0B1
+implementation is in progress, without new Go execution authority. This branch
+retains the recovered original product history. Read its latest reviewed
+commits and the private ledger before choosing a resume point.
 
 The latest verified complete private execution archive has SHA256
 `776df04664b505741cdcc17ced6ebeccfedc362a701ed6d546221103b5806596`.
 Its 593 logical files include all new raw execution, parent logs and independent
 reviews; all eleven native SOURCE parts were read back and a fresh restore
-verified. A later honest planning WIP snapshot has SHA256
-`a81583c0e5fcdcb741e1063844b9cf9352c2fbb1661ebec77946c45b5fc1b652`:
-40 files/three parts, also read back and restored. It excludes the subsequently
-completed resource investigation and open implementation plan. Neither snapshot
-replaces its required code, metadata and older archive dependency chain.
+verified. Accepted source/helper evidence is preserved in checkpoint
+`33476c2db881dcce7182c7f740f9a09eae1f80e25fa0c295d828d794446df654`:
+91files/four SOURCE parts. The latest verified private design WIP delta is
+`f9e4c9f2ee79bc6791ec508f7f33880511f1bf051a411ddbf5cbfbda3b158487`:
+29files/three parts, also read back and restored. It preserves the first
+design correction; subsequent clean reviews, final counter correction and P0B1
+code are later work. Its237 ordered SOURCE dependencies and all882 references
+on the private backup Page remain available. These snapshots depend on the
+preserved code, metadata and older archive chain; a delta is not a replacement.
 
 The repaired finite prototype passed 28 positive declarations and four exact
 negative conversion controls, with independent review. Only the small private
@@ -39,8 +47,11 @@ The older failed negative-attribution result remains historical evidence and
 was not retroactively accepted. Both complete old generated modules were also
 restored byte-for-byte; preserve them instead of regenerating over them.
 
-The new plan starts with full-source and tool-invocation supervision, then shared
-presence and the opt-in partitioned generator. Full generation and compilation
+The new plan starts with full-source and tool-invocation supervision. Its
+four-script helper unit is accepted; the composed host/fixture supervisor is
+still incomplete. Continue P0B1 events/host evidence, P0B2 SDK trace parsing,
+P0B3 fixture/driver integration, and the separately released P0B4 SDK
+characterization before shared presence and the opt-in generator. Full generation and compilation
 need distinct reviewed releases. Follow the current ledger's next action and
 closed reviews, not an old checkpoint's historical pending label. Preserve all
 unfinished WIP as such; a backup is not acceptance.
@@ -50,7 +61,8 @@ tests or an environment transition. Read back the remote head; a local commit
 alone is not an external backup. Do not force-push or overwrite older backups.
 
 Checkpoint private uncommitted work before long tests and at least every
-20 minutes while changing it. Verify uploaded bytes and hashes, and perform a
+20 minutes while changing it; start preparation10 minutes after the previous
+verified checkpoint. Verify uploaded bytes and hashes, and perform a
 restore check before treating a checkpoint as recoverable. If that check fails,
 pause new changes until the backup is repaired. Preserve previous checkpoints
 and their dependency chain; never publish private evidence in the public repo.
