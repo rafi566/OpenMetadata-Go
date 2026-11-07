@@ -136,6 +136,163 @@ contracts to P4. Module compiler scope is `<module>/...`; response files reject.
   this support. Close a separate finite P1 command release before P1 Go. P0
   itself authorizes no Go or complete-corpus command schedule.
 
+### Task P0B1: Driver-bound v2 events and supervised host identity
+
+**Authority:** [supervised tool/fixture design](../specs/2026-11-07-go-supervised-tool-and-fixture-design.md)
+and [precise wire contract](../specs/2026-11-07-go-build-supervision-wire.md).
+P0's four-file v1 helper unit is accepted at6ffd32aabbd; full composition is
+incomplete. These tasks stay in this plan and its existing SDD workspace.
+They precede P1. Root alone authorizes Go and commits/pushes reviewed units.
+
+**Files:** Create `scripts/build_tool_events.py` and
+`scripts/test_build_tool_events.py`; modify `scripts/record_partitioned_tool.py`
+and its existing test only for v2 dispatch. Preserve all v1 behavior and tests.
+
+**Interfaces:** `load_job_policy(raw: bytes) -> dict` admits strict v2 policy;
+`load_driver_context(path: Path, expected_sha256: str) -> dict` validates pinned
+config/start/policy and actual caller ancestry;
+`append_event(policy: dict, context: dict, kind: str, data: dict) -> dict` returns
+the durable envelope; `read_job_events(record_directory: Path,
+contexts: dict[str,dict]) -> list[dict]` validates/replays shared reservation and
+budget accounting; `run_host_probe(policy: dict, context: dict, argv: list[str],
+importpath: str) -> int` supervises/forwards exact admitted probe and returns
+actual status. Context resolution for callbacks has an explicit `recorder_pid`
+parameter only in the internal validation helper; production uses os.getpid().
+The public loader never trusts a caller-selected PID. Existing recorder
+`main(argv: list[str]) -> int` dispatches v1 unchanged or validated v2.
+
+- [ ] Write importable initial APIs and meaningful behavior RED. Test names:
+  `test_v1_is_unchanged`, `test_host_requires_exact_role_argv_and_root_pin`,
+  `test_context_rejects_wrong_parent_or_derived_policy`,
+  `test_start_is_durable_before_child_and_completion_is_reserved`,
+  `test_host_forwards_original_stderr_and_status`,
+  `test_nonzero_unparseable_and_nonempty_stdout_fail`,
+  `test_timeout_overflow_shortwrite_and_missing_completion_fail`,
+  `test_concurrent_start_completion_share_fixed_job_budgets`.
+  Use labelled owned Python toy executables/fake SDKs; no selected SDK/host
+  binary. Ownership tests use actual current identities plus injected stat
+  fixture data for unavailable UID0 scenarios, explicitly distinguished.
+- [ ] Run activated Python3.11.17:
+  `python -B -m unittest discover -s scripts -p 'test_build_tool_events.py'`.
+  Record actual assertion RED, then implement exact wire types,10s/64KiB host
+  supervision, durable start/completion and bounded concurrent journal replay.
+  Do not alter v1 event schema or any fixed budget.
+- [ ] Run the new suite plus
+  `python -B -m unittest discover -s scripts -p 'test_*partitioned*.py'`.
+  Expect PASS with actual terminal/EOF/reaping evidence for owned toy children.
+  Preserve RED and failed intermediate outcomes; tests must detect removal of
+  parent binding, completion reserve and exact argv gates.
+- [ ] Original author self-reviews; independent scoped review validates spec
+  and quality. Root normal commit/push/readback after clean review. No Go yet.
+
+### Task P0B2: Bounded SDK hash trace and event reconciliation
+
+**Files:** Create `scripts/build_hash_trace.py` and
+`scripts/test_build_hash_trace.py`.
+
+**Interfaces:** `decode_go_quote(raw: bytes, limit: int) -> bytes`;
+`parse_hash_trace(chunks: Iterable[bytes]) -> list[dict]` produces verified
+named hash blocks with ordinal/decoded inputs/final digest;
+`reconcile_driver(context: dict, terminal: dict, events: list[dict],
+blocks: list[dict], coverage: dict) -> dict` returns compact coverage receipt.
+Consumes P0B1 exact envelopes and wire contract. coverage is released data with
+exact `format,driver_id,argv,required_packages,zero_build_diagnostic` keys,
+format=om-build-coverage-v1, argv equals registered args, sorted unique exact
+required_packages<=30000, zero_build_diagnostic boolean. True admits only an
+explicit released diagnostic such as `version`, never test/build/generate;
+false requires at least one complete build block and every required package.
+No missing trace can implicitly select diagnostic mode.
+
+- [ ] Add meaningful RED for `test_quote_bytes_and_unicode_are_not_json`,
+  `test_hash_salt_input_end_digest_and_interleaving`,
+  `test_malformed_truncated_overlapping_and_budget_bounds_reject`,
+  `test_sdk_shaped_swallowed_error_rejects_even_parent_exit_zero`,
+  `test_failure_before_journal_registration_is_seen_in_trace`,
+  `test_cached_id_reuse_is_same_driver_only`,
+  `test_zero_build_requires_explicit_nonsemantic_coverage`.
+  Expected positive hash fixtures use manually constructed byte strings and
+  hashlib rather than copied implementation parsing. Negative quoted forms
+  include actual\\a/\\v/\\xFF, Unicode scalar/surrogate and trailing-token edges.
+- [ ] Under activated venv run
+  `python -B -m unittest discover -s scripts -p 'test_build_hash_trace.py'`;
+  record assertion RED, implement byte decoder and incremental bounded parser,
+  then confirm PASS. Source-bind accepted forms to selected SDK hash.go and
+  buildid.go/exec.go, without executing them. Reject unsupported forms.
+- [ ] Reconcile actual start/completion identities/policy and ID inputs; test
+  labelled toy parent deliberately swallowing child failure. Test all raw
+  terminal/EOF/loss and package-coverage rejection cases. This is Python evidence,
+  not an observed Go characterization or performance measurement.
+- [ ] Independent scoped review, root normal commit/push/readback. No Go yet.
+
+### Task P0B3: Shared driver capture and generated-fixture lifecycle
+
+**Files:** Create `scripts/build_supervision.py`,
+`scripts/build_supervision_io.py`, `scripts/test_build_supervision.py`; modify
+`internal/schema/generate_test.go` only configured helper lifecycle/support
+wiring. Do not move Optional until P1. Existing helper assertions/signature/
+Generate calls/direct unconfigured branch remain unchanged.
+
+**Interfaces:** `load_job(raw: bytes) -> dict`,
+`handle_request(config: dict, mode: str, raw: bytes) -> dict`,
+`supervise_driver(config: dict, driver: dict, manifest: dict) -> dict`,
+`main(argv: list[str]) -> int` in build_supervision.py;
+`capture_streams(process: subprocess.Popen, job_root: Path, driver_root: Path,
+deadline_ns: int) -> dict` and `reserve_raw(job_root: Path, count: int) -> int`
+in build_supervision_io.py. Preserve exact wire replies/state transitions,
+one32MiB job counter/4MiB segments and actual gated identity through SDK exec.
+Use P0 source guard, P0B1 contexts/events and P0B2 reconciliation.
+
+- [ ] Add importable APIs then actual RED for fixture extra/missing/tamper
+  before/after run, policy derivation, replay, forged/stale PID and lost gate.
+  Test fake child exec confirms PID/start equals parent-created registry and
+  preexec_fn deadlock is absent; never selected Go.
+- [ ] Add output tests with two concurrent toy drivers exceeding the shared
+  limit in aggregate while each alone is below it; prove root output counts,
+  segments preserve hashes/order, short writes/reservation gaps/unknown loss
+  reject, replies cannot exceed4096B, timeout reaps owned descendants. Bound toy
+  data generation and process lifetimes; do not raise runtime caps for tests.
+- [ ] Activated Python:
+  `python -B -m unittest discover -s scripts -p 'test_build_supervision.py'`.
+  Record behavior RED, implement minimal engine/capture, confirm PASS. Then
+  run all three new Python suites plus existing P0 suites once on final source.
+- [ ] Wire configured Go helper to freeze using exact t.Name()/Generate paths,
+  bounded run response and separate10s post after run failure/before Fatal.
+  No Go or gofmt invocation yet. Source review verifies unchanged assertions
+  and default behavior; actual Go compile/test remains P0B4/P1 released work.
+- [ ] Independent scoped review; normal root commit/push/readback, then external
+  checkpoint of exact source/evidence and unfinished characterization state.
+
+### Task P0B4: Finite selected-SDK characterization and P0 closure
+
+**Files:** New private exact controller config, source manifests, policies,
+launcher, fixture and action inventory/release under this plan's workspace.
+No product source change except a reviewed correctness fix through original
+author if observed characterization contradicts candidate assumptions.
+
+**Interfaces:** Exact source/controller release consumes P0B1–3 checked schemas.
+Action inventory is a finite ordered list of driver config Pins and exact argv,
+expected compile/host packages, normal and intentional failure expectations,
+resource/evidence/export budgets and single-attempt authority. Generation A/B
+and actual full-layout compile schedule are separate later releases.
+
+- [ ] Prepare a tiny private source fixture and finite commands that demonstrate
+  selected SDK normal host ID, intentional swallowed host failure before journal,
+  unparseable exit0 and actual gocachehash trace. Show actual fixed caps and
+  owned process/capture count closure before authorization. No warmup/retry.
+- [ ] Independently review exact full source/manifests/config/environment,
+  GODEBUG exception, controller integration, command/expected-outcome inventory
+  and negative controls. External SOURCE readback plus fresh restore MUST pass
+  before root issues this new finite Go release. Existing nine Go entries are
+  spent and confer no authority.
+- [ ] Execute only released commands, preserving all actual statuses, raw
+  output, events, source pre/post, replay and no-survivor evidence. An observed
+  mismatch fails and returns to original author/review; no silent retry or
+  cap change. Finite negative expectations must match exact failure reasons.
+- [ ] Independently review characterization; root closes full P0 only if
+  composition evidence proves every invariant. Save private outcome and source
+  before P1's separate reviewed finite Go release. Task6/full migration stays
+  unaccepted until its own complete gates.
+
 ### Task P1: Shared presence and legacy characterization
 
 **Files:** Create `internal/schema/presence/optional.go` and a focused sibling
