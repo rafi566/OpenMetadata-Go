@@ -368,6 +368,11 @@ the exact old templates. `documentComponents(edges []typedEdge,nodes []Node)
 
 ### Task P3: Complete opt-in output and ordinary embedding
 
+**Proposed argv correction:** independently review/adopt
+`../specs/2026-11-07-go-partitioned-alias-aggregation-design.md` before P3 code.
+The previous per-node physical facade layout exceeds64KiB encoded argv even
+without absolute paths/options. P0B1 remains independent of this amendment.
+
 **Files:** Create `generate_partitioned.go`, `generate_partition_emit.go`,
 `generate_partition_manifest.go`, `generate_partitioned_test.go`; modify CLI
 `schema.go` and add focused tests to a new `schema_partitioned_test.go`.
@@ -397,14 +402,23 @@ Carrier exposes internal-only `Carrier`, `FromValue(support.Value) Carrier`,
   whitespace and Unicode-letter paths, hidden/underscore/testdata descendants,
   mirror prefix collisions and raw/helper file-directory collisions. Assert
   original/mirror/embedded file-set and hash equality, with no extra files.
+- [ ] Add `TestPartitionFacadeAggregation`: sorted structured node identities,
+  complete unsplit node alias/object/enum/constant groups, deterministic greedy
+  packing at16MiB including formatted deduplicated imports, and no missing or
+  duplicate declarations/implementation targets. Check actual facade chunk
+  paths and existing four-field model-index values; no invented filename field.
+  Assert shuffled-input byte equality, exact-fit/next-group boundary and no-write
+  single-group16MiB+1 or unavoidable filename-argv65536+1 rejection. Use bounded
+  size metadata/shared buffers at large boundaries rather than massive fixtures.
 - [ ] Add no-write failures for nil registry, malformed package/import/module
   location, reserved support destinations, canonical-root wrong package,
   existing/symlink output, symbol/case-fold/path collisions, 28,000+1 paths,
   16-MiB+1 member, 256-MiB+1 total, 240-byte+1 component and oversized SCC.
   Use shared buffers/metadata at budget boundaries rather than massive fixtures.
 - [ ] Implement a second fresh emitter state: qualified component references,
-  combined imports and one implementation file per component; per-node facade
-  aliases, constant forwarding, one registry/carrier, alternate-root presence
+  combined imports and one implementation file per component; complete facade
+  groups greedily packed into models_aliases_NNNN.go chunks, constant forwarding,
+  one registry/carrier, alternate-root presence
   facade, original assets plus safe mirror, indexes and partition manifest.
   Reconcile planned/emitted edge and declaration digests before writing.
   Manifest format is `openmetadata-go-partitioned-models-v1`: `import_path`,
@@ -412,6 +426,10 @@ Carrier exposes internal-only `Carrier`, `FromValue(support.Value) Carrier`,
   document members/imports), `declarations` (structured identity/kind/name/
   implementation/facade), typed `edges`, and sorted `files` (path/bytes/SHA256).
   `owned_paths` includes the manifest itself; `files` excludes its self-hash.
+  `declarations.facade` points to the actual aggregate chunk. Keep model-index
+  path/pointer/name/sha256 unchanged. Apply actual formatted16MiB chunk bound and
+  unavoidable absolute facade/support filename-argv lower-bound check before
+  output writes; a passing lower bound does not prove full compiler argv.
   Component digests use SHA256 over sorted original member paths, each encoded
   as UTF-8 followed by one LF (admitted paths cannot contain LF). Retain full digests and reject
   shortened-key collisions. Other JSON is deterministic indented UTF-8 plus LF.
@@ -451,6 +469,11 @@ same supervised resources/timeout, never merely a smaller watched source set.
   standard library, vet, cgo and test variants; smaller batches need a closed
   reviewed plan, never automatic retry. Keep each unchanged controller's total
   256 owned identities/128 compiler captures and every raw output/telemetry cap.
+- [ ] Preflight full exact compiler argv JSON<=65536 with selected tool paths,
+  all generated/support filenames, flags, import/embed configs, test variants
+  and released temporary path bounds. Check before launch; retain actual
+  recorder enforcement and reject response files. Chunk/package counts alone
+  are not argument proofs. No cap raise or source omission on failure.
 - [ ] Use `-p=1` and explicit all-package compiler `-c=1` flags, with independently
   recorded effective command coverage including nested fixture Go children.
   Warm normal/race dependency closures separately using normal caches; no cache

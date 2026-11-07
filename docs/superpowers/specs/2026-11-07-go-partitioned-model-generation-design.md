@@ -118,10 +118,15 @@ declarations/imports and their manifest targets.
 Assign SCC package names from a deterministic digest of their sorted full
 document memberships; collision-check shortened names against full digests.
 Within each component, emit one combined implementation Go file with sorted,
-deduplicated imports and deterministic declaration order. Preserve each original
-per-node facade filename and the existing model-index row fields. Exported
-model/object aliases and constant forwarding declarations must have exactly one
-recorded implementation target.
+deduplicated imports and deterministic declaration order. Proposed P3 correction:
+aggregate opt-in facade node groups into deterministic `models_aliases_NNNN.go`
+chunks bounded at16MiB including formatted imports, as specified in
+[the alias aggregation amendment](2026-11-07-go-partitioned-alias-aggregation-design.md).
+The old per-node physical promise cannot fit64KiB argv. Default generator paths
+and bytes remain exact. Preserve actual model-index fields path/pointer/name/
+sha256 and values; each partition declaration maps to its actual owned chunk and
+exactly one implementation target. Adoption of this correction is required
+before P3 code, independently of current P0B1 work.
 
 Emit a versioned partition manifest containing every source document/hash,
 component/full membership digest, intercomponent import edge, declaration and
