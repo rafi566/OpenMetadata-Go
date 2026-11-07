@@ -221,3 +221,9 @@ class RecorderTests(unittest.TestCase):
         self.refused(self.command(["-c=1"]))
         self.journal.write_bytes(b"x"*(128*1024+1)+b"\n")
         self.refused(self.command(["-c=1"]))
+
+    def test_v2_dispatch_requires_pinned_context_before_execution(self):
+        self.policy.update(format='om-go-tool-record-policy-v2', host_id_probes=[])
+        result = self.command(['-c=1'])
+        self.refused(result)
+        self.assertEqual(self.journal.read_bytes(), b'')

@@ -221,17 +221,35 @@ def _record_and_exec(policy, policy_sha, tool, argv):
 
 
 def main(argv: list[str]) -> int:
+    v2 = False
     try:
         _require(len(argv) >= 5 and argv[0] == "--policy" and argv[2] == "--policy-sha256", "invocation")
         _digest(argv[3])
         raw = _read_file(argv[1], POLICY_LIMIT)
         _require(hashlib.sha256(raw).hexdigest() == argv[3], "policy SHA mismatch")
+        parsed = _json(raw, POLICY_LIMIT)
+        if type(parsed) is dict and parsed.get('format') == 'om-go-tool-record-policy-v2':
+            v2 = True
+            from build_tool_events import dispatch_v2
+            status = dispatch_v2(raw, argv[1], argv[3], argv[4:])
+            if status < 0:
+                import signal
+                signum = -status
+                if signum not in (signal.SIGKILL, signal.SIGSTOP):
+                    signal.signal(signum, signal.SIG_DFL)
+                os.kill(os.getpid(), signum)
+                return 1
+            return status
         policy = load_policy(raw)
         selected = next((row for row in policy["tools"] if row["path"] == argv[4]), None)
         _require(selected is not None, "unpinned tool")
         _record_and_exec(policy, argv[3], selected, argv[4:])
     except (OSError, ValueError, TypeError, KeyError, OverflowError, RecursionError) as error:
-        print("tool recorder refused: "+str(error), file=sys.stderr)
+        if v2:
+            from build_tool_events import _refusal_diagnostic
+            _refusal_diagnostic(error)
+        else:
+            print("tool recorder refused: "+str(error), file=sys.stderr)
         return 1
     return 1
 
