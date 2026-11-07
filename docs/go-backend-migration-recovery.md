@@ -16,11 +16,13 @@ matches the original commit above. The public `go/full-backend-source-backup` br
 
 Current public design/plan work continues on `go/partitioned-model-generation`.
 The latest reviewed design checkpoint is commit
-`63952bd5e5d1e140edd7916d134366a3c0254b33`; its normal push and exact remote head
+`168c111ce73c398a90de7668c6e0a0ebd7d5e0c0`; its normal push and exact remote head
 were verified. The four source/tool helper scripts were accepted at
 `6ffd32aabbdcaa6682cfb26db25a37bcbd25ed39` after31 Python checks and independent
 review. The newer host/fixture supervision design has passed review; its P0B1
-implementation is in progress, without new Go execution authority. This branch
+implementation is in progress. The first production fix passed its scoped
+review; the current third fix round addresses test receipt publication and
+process observation. B1 is not accepted and has no new Go execution authority. This branch
 retains the recovered original product history. Read its latest reviewed
 commits and the private ledger before choosing a resume point.
 
@@ -30,12 +32,17 @@ Its 593 logical files include all new raw execution, parent logs and independent
 reviews; all eleven native SOURCE parts were read back and a fresh restore
 verified. Accepted source/helper evidence is preserved in checkpoint
 `33476c2db881dcce7182c7f740f9a09eae1f80e25fa0c295d828d794446df654`:
-91files/four SOURCE parts. The latest verified private design WIP delta is
-`f9e4c9f2ee79bc6791ec508f7f33880511f1bf051a411ddbf5cbfbda3b158487`:
-29files/three parts, also read back and restored. It preserves the first
-design correction; subsequent clean reviews, final counter correction and P0B1
-code are later work. The chain now has237 ordered SOURCE references and all882 references
-on the private backup Page remain available. These snapshots depend on the
+91files/four SOURCE parts. The latest verified private source WIP delta is
+`3997ad41e89f880cb3bdf71480ecf93303bd7ef2d93b70ed104e146ad69703a0`:
+80 files/four active SOURCE parts, including unfinished fix3 and two failing
+observations. A reconciled independent restore verified all file bytes, hashes
+and modes; proof SHA256 is
+`27bab80b5a5222105d366fd414491998c1ff719152c5a5331cfcac651ab8fbce`.
+Two duplicate uploads are retained with an explicit audit after a truncated
+tool display was mistaken for completed execution. The chain now has261 ordered
+SOURCE references and all906 references on the private backup Page remain
+available. Page83 readback was observed complete by17:15:38 UTC; its provider
+updated_at was stale and is not the checkpoint clock. These snapshots depend on the
 preserved code, metadata and older archive chain; a delta is not a replacement.
 
 The repaired finite prototype passed 28 positive declarations and four exact
@@ -67,6 +74,11 @@ restore check before treating a checkpoint as recoverable. If that check fails,
 pause new changes until the backup is repaired. Preserve previous checkpoints
 and their dependency chain; never publish private evidence in the public repo.
 Record the latest verified checkpoint and next action in the recovery ledger.
+After uncertain or truncated tool output, reconcile the still-running execution,
+stored receipts and external state before repeating an upload or save. Preserve
+actual failed attempts and duplicate references. Do not run Git commit/push
+while code authors or tests are active: both normal hooks can temporarily
+stash and restore tracked changes. Verify source hashes after each hook.
 The 20-minute target has been missed during review/backup preparation; misses
 are recorded. These safeguards reduce recovery risk, not guarantee zero loss.
 
