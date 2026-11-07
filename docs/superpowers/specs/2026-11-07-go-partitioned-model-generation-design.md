@@ -45,6 +45,11 @@ containing only letters, digits, `-`, `_` and `.`, beginning with a letter or
 digit; reject `.`/`..`, trailing dots, Windows device components and a first
 component of `internal`, `cmd`, `work`, `scripts` or `testdata`. These are new-mode
 configuration restrictions, not changes to admitted source schema paths.
+Validate Package as a Go identifier other than `_` or a keyword. Require
+`Package == "schema"` for `ImportPath == <module>/schema`. Verify the explicit
+import suffix equals OutputDir's relative path inside the nearest copied
+original-module root; reading `go.mod` verifies the supplied identity, never
+infers a missing ImportPath. Reject a mismatch before staging or writing.
 
 Preserve every named model, object projection, constant, typed signature,
 JSON tag, validator node and numeric token. Preserve zero composite literals,
@@ -203,3 +208,14 @@ increase resource limits. Final independent ordinary/race tests, CLI build,
 full-profile schema check, normal hooks, strongest whole-foundation review and
 verified external backups remain required. Model completion does not establish
 server/ingestion/connector/state parity or the approved performance gains.
+
+## Design review and authority
+
+The initial builder review found that a canonical schema root could request a
+different package and conflict with protected support/tests. The explicit
+configuration admission above closes that design gap; the implementation must
+still prove it with a no-write negative test. This is a technical continuation
+of the user's approved full migration and subagent-driven method. It changes
+the internal Go foundation layout rather than Java/Python wire/state scope.
+Implementation needs the reviewed concrete plan and per-command resource
+release; this document alone does not authorize executing Go or accept Task 6.

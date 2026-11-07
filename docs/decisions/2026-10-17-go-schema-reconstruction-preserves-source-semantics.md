@@ -1,6 +1,6 @@
 # Go schema reconstruction preserves source identities and exact values
 
-- **Status:** Accepted
+- **Status:** Accepted; presence location amended by ADR:2026-11-07-go-model-partitions-share-presence-and-preserve-wire-semantics
 - **Revisions:** v1 2026-10-17 (reconstruction authority and consumed interfaces) · v2 2026-10-17 (source-bound registry and dependency arithmetic admission) · v3 2026-10-17 (selected schema admission and collector identities) · v4 2026-10-17 (independent resource base preservation) · v5 2026-10-17 (metadata validity preservation) · v6 2026-10-17 (canonical dialect rejection before sibling arithmetic)
 - **Deciders:** Migration controller, applying the user's approved full migration and authorized reconstruction
 - **Guard:** Reviewer; focused behavior tests and independent compilation required by the reconstruction plan

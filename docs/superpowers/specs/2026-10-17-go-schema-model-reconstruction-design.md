@@ -156,6 +156,12 @@ this bounded admission is not a claim of complete numeric semantic parity.
 
 ## Generated models
 
+The explicit partitioned layout and shared-presence location exception are
+specified in [the partition design](2026-11-07-go-partitioned-model-generation-design.md)
+and ADR:2026-11-07-go-model-partitions-share-presence-and-preserve-wire-semantics.
+Legacy generator defaults remain; the Optional defining-identity change applies
+across both layouts. Complete wire/validation/state obligations below remain.
+
 Generate from every physical schema and its schema nodes deterministically.
 Names derive from full physical path/pointer/kind. Reject model/helper/enum and
 case-insensitive filename collisions with both source locators. Export Unicode

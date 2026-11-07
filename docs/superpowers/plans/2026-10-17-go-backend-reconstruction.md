@@ -91,6 +91,14 @@ scripts/env.sh resolves itself; OM_GO_ROOT/OM_PYTHON_VENV/OM_CACHE_ROOT default 
 
 ### Task 6: Full corpus acceptance
 
+Execution amendment: continue through the separately reviewed
+[partitioned model plan](2026-11-07-go-partitioned-model-generation.md), beginning
+with its supervised source/tool evidence support. This replaces the monolithic
+generation/build route below with explicit partitioned output and bounded
+scheduling; complete coverage, all semantics and final acceptance stay binding.
+Its explicit cross-mode presence exception is recorded in
+ADR:2026-11-07-go-model-partitions-share-presence-and-preserve-wire-semantics.
+
 **Files:** T6; new testdata/models/{create-table,table,connection,entity-reference,odcs,rdf}.json plus invalid controls; generated testdata/schemas/reference-graph.json. Venv script records reference locators/targets, containment/type edges/SCCs; cross-check Resolve.
 
 - [ ] TestFullCorpusGraph:1071exact documents/every ref/required node/model-index entry; no unresolved/dropped/colliding nodes. Audit all14SCC member sets plus traversable recursive typed shape per SCC; no-shape cycles block acceptance. Record fresh References/Nodes/Compiled, never copy18084.
