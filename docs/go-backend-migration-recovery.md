@@ -34,7 +34,7 @@ verified. Accepted source/helper evidence is preserved in checkpoint
 `f9e4c9f2ee79bc6791ec508f7f33880511f1bf051a411ddbf5cbfbda3b158487`:
 29files/three parts, also read back and restored. It preserves the first
 design correction; subsequent clean reviews, final counter correction and P0B1
-code are later work. Its237 ordered SOURCE dependencies and all882 references
+code are later work. The chain now has237 ordered SOURCE references and all882 references
 on the private backup Page remain available. These snapshots depend on the
 preserved code, metadata and older archive chain; a delta is not a replacement.
 
