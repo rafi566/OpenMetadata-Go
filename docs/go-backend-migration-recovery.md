@@ -14,15 +14,17 @@ The original history is now also preserved on GitHub at
 matches the original commit above. The public `go/full-backend-source-backup` branch at commit
 `e424f06c30acddae4b928c3611c4f2067198f4b8` has the same source tree.
 
-Current public design/plan work continues on `go/partitioned-model-generation`.
-The latest reviewed design checkpoint is commit
-`168c111ce73c398a90de7668c6e0a0ebd7d5e0c0`; its normal push and exact remote head
+Current public source work continues on `go/partitioned-model-generation`.
+The latest reviewed source checkpoint is commit
+`483e1c4f4b6926e600c8ee68aaeece465070d9fe`; its normal push and exact remote head
 were verified. The four source/tool helper scripts were accepted at
 `6ffd32aabbdcaa6682cfb26db25a37bcbd25ed39` after31 Python checks and independent
-review. The newer host/fixture supervision design has passed review; its P0B1
-implementation is in progress. The first production fix passed its scoped
-review; the current third fix round addresses test receipt publication and
-process observation. B1 is not accepted and has no new Go execution authority. This branch
+review. P0B1 event/host supervision is accepted at
+`caa673583f87fd2bc515f8365d8136c63b89b2fc` after independent review and affected
+checks. P0B2 trace parsing/reconciliation is accepted at the latest checkpoint
+after 26 Python checks and clean final independent review. P0B3 shared capture
+and fixture integration is being implemented. These source units grant no new
+Go execution authority. This branch
 retains the recovered original product history. Read its latest reviewed
 commits and the private ledger before choosing a resume point.
 
@@ -32,17 +34,22 @@ Its 593 logical files include all new raw execution, parent logs and independent
 reviews; all eleven native SOURCE parts were read back and a fresh restore
 verified. Accepted source/helper evidence is preserved in checkpoint
 `33476c2db881dcce7182c7f740f9a09eae1f80e25fa0c295d828d794446df654`:
-91files/four SOURCE parts. The latest verified private source WIP delta is
-`3997ad41e89f880cb3bdf71480ecf93303bd7ef2d93b70ed104e146ad69703a0`:
-80 files/four active SOURCE parts, including unfinished fix3 and two failing
-observations. A reconciled independent restore verified all file bytes, hashes
-and modes; proof SHA256 is
-`27bab80b5a5222105d366fd414491998c1ff719152c5a5331cfcac651ab8fbce`.
-Two duplicate uploads are retained with an explicit audit after a truncated
-tool display was mistaken for completed execution. The chain now has261 ordered
-SOURCE references and all906 references on the private backup Page remain
-available. Page83 readback was observed complete by17:15:38 UTC; its provider
-updated_at was stale and is not the checkpoint clock. These snapshots depend on the
+91 files/four SOURCE parts. The latest verified private source delta is
+`b0e4fd0add7992970d37a8e9c0fd57bc85ab139ae3b25ec3538912223523bcee`:
+64 files/four Page SOURCE parts, including final reviewed B2 source, tests,
+reports and all new failed/corrected evidence. An independent fresh restore
+verified all file bytes, hashes and modes; proof SHA256 is
+`386c56a345deedb931a68befd589391e86b4655da76c178633b506fca6a9d271`.
+Earlier duplicate uploads and one upload with unknown outcome are preserved
+with their actual receipts; uncertain writes are never blindly repeated.
+Private Page SOURCE blocks now carry new archives after the File upload path
+returned an unknown outcome. These are typed Page/block identities. The chain
+has 269 File SOURCE references and 14 Page SOURCE blocks; all 914 existing
+references on the main recovery Page remain. Its latest readback was observed
+at 19:59:46 UTC on 2026-11-07; provider updated_at is not the checkpoint clock.
+An extra terminal newline in local saved copies was detected and corrected
+from actual SOURCE readbacks before verification; the erroneous copies and
+exact diagnosis remain preserved. These snapshots depend on the
 preserved code, metadata and older archive chain; a delta is not a replacement.
 
 The repaired finite prototype passed 28 positive declarations and four exact
@@ -55,9 +62,9 @@ was not retroactively accepted. Both complete old generated modules were also
 restored byte-for-byte; preserve them instead of regenerating over them.
 
 The new plan starts with full-source and tool-invocation supervision. Its
-four-script helper unit is accepted; the composed host/fixture supervisor is
-still incomplete. Continue P0B1 events/host evidence, P0B2 SDK trace parsing,
-P0B3 fixture/driver integration, and the separately released P0B4 SDK
+four-script helper unit and P0B1/P0B2 source units are accepted; the composed
+host/fixture supervisor is still incomplete. Continue P0B3 fixture/driver
+integration, then the separately released P0B4 SDK
 characterization before shared presence and the opt-in generator. Full generation and compilation
 need distinct reviewed releases. Follow the current ledger's next action and
 closed reviews, not an old checkpoint's historical pending label. Preserve all
