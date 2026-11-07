@@ -209,3 +209,6 @@ ingestion/.claude/agents
 test-results/
 
 docs/superpowers/*
+/.worktrees/
+/.superpowers/
+/work/
