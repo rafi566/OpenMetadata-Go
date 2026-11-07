@@ -53,6 +53,21 @@ class ParserBoundaryTests(unittest.TestCase):
         with self.assertRaises(ValueError):decode_go_quote(b'"ab"',1)
         with self.assertRaises(ValueError):decode_go_quote(b'""',True)
 
+    def test_mixed_literal_escape_oracle_at_decoded_boundary(self):
+        # Hand-authored bytes: each a/newline pair is two decoded bytes;
+        # quote + z + UTF-8 e-acute supplies the final four of 512KiB.
+        raw=b'"'+b'a\\n'*262142+b'\\"z\xc3\xa9'+b'"'
+        want=b'a\n'*262142+b'"z\xc3\xa9'
+        self.assertEqual(len(want),512*1024)
+        self.assertLessEqual(len(raw),1024*1024)
+        self.assertEqual(decode_go_quote(raw,512*1024),want)
+        with self.assertRaisesRegex(ValueError,'decoded byte bound'):
+            decode_go_quote(raw,512*1024-1)
+        with self.assertRaisesRegex(ValueError,'decoded byte bound'):
+            decode_go_quote(raw[:-1]+b'x"',512*1024)
+        with self.assertRaisesRegex(ValueError,'trailing/interior quote'):
+            decode_go_quote(raw[:-1]+b'"x"',512*1024)
+
     def test_salt_and_digest_causal_mutants(self):
         for inputs in [(b'compile\n',),(b'go1.27.1',b'compile\n')]:
             # Final SHA is independently correct for the wrong/missing salt.

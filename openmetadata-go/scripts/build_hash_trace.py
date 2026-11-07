@@ -64,8 +64,9 @@ def decode_go_quote(raw: bytes, limit: int) -> bytes:
             continue
         _require(value != 34, 'trailing/interior quote')
         next_escape = raw.find(b'\\',index,end)
-        next_quote = raw.find(b'"',index,end)
-        stop = min([end]+[position for position in (next_escape,next_quote) if position >= 0])
+        stop = end if next_escape < 0 else next_escape
+        next_quote = raw.find(b'"',index,stop)
+        if next_quote >= 0: stop = next_quote
         _require(stop-index <= limit-len(output), 'decoded byte bound')
         literal = raw[index:stop]
         try: text = literal.decode('utf-8',errors='strict')
