@@ -107,6 +107,11 @@ The tool recorder's `main(argv: list[str]) -> int` records exact selected-tool
 arguments and TOOLEXEC_IMPORTPATH before exec, preserving tool/version output
 and exit behavior. Bind approved tools, invocation/environment/source scope,
 response-file policy and finite argument/record budgets in its release.
+Use the exact strict `load_manifest(raw: bytes) -> dict`,
+`load_policy(raw: bytes) -> dict`, exclusion, tool-policy, journal and aggregation
+contracts in [the guarded build protocol](../specs/2026-11-07-go-guarded-build-protocol.md).
+Do not infer duplicate-JSON safety from an already parsed dict or defer those
+contracts to P4. Module compiler scope is `<module>/...`; response files reject.
 
 - [ ] Write real filesystem and owned child fixture tests for source tampering,
   extra/omitted files, symlink/ancestor redirect, duplicate entries, changed read,
@@ -114,8 +119,10 @@ response-file policy and finite argument/record budgets in its release.
   probing. A missing module is setup evidence; record meaningful RED from a
   real contract assertion after an importable initial API exists.
 - [ ] Implement only those guards. Exercise actual small child processes;
-  preserve their terminal exits/EOF/cleanup. No Go, tool impersonation or
-  uncontrolled subprocess is needed for Python behavior checks.
+  preserve their terminal exits/EOF/cleanup. Use explicitly identified toy
+  child programs in isolated fake SDK fixture trees; never execute a selected
+  Go SDK binary or present a fixture result as a Go result. No uncontrolled
+  subprocess is needed for Python behavior checks.
 - [ ] Review the full-source wrapper composition: immutable narrow controller
   inputs remain under its old500files/4MiB guard; full input checks execute
   before/after the child INSIDE the same900s/resource supervision. It cannot
@@ -251,13 +258,22 @@ source guard/recorder and unchanged reviewed controller. Do not mutate old
 controllers, releases, module pairs or receipts.
 
 **Interfaces:** Consume P0's exact guarded manifest/recorder interfaces and P3's
-actual output/import manifests. Controller watches narrow immutable code; the
+generator. A generation-only release first produces actual output/import
+manifests; the later compilation release consumes those frozen manifests.
+Controller watches narrow immutable code; the
 reviewed composition preserves complete before/after source checks within the
 same supervised resources/timeout, never merely a smaller watched source set.
 
 - [ ] Verify the pinned P0 support and review any new scheduling-specific fault
   controls. Preserve normal/failure evidence; don't repeat unchanged passed
   checks or treat historical results as fresh executions.
+- [ ] Close a GENERATION-ONLY release of the exact two partitioned CLI commands
+  into NEW copied original-module roots `partitioned-{a,b}`. Guard generator,
+  authoritative schemas and copied support; declare only the new output trees
+  as output exclusions for this phase. Do not compile the outputs yet. Run the
+  two released generations, freeze complete resulting source/output/import
+  manifests, compare deterministic paths/bytes, and audit counts/bounds. Preserve
+  actual failures. This is the input to scheduling, not its result.
 - [ ] Derive a finite dependency-first schedule from actual manifests/imports.
   Start with <=32 package targets/batch and <=128 commands per (copy,mode),
   including its final all-package command. Account for actual cold closures,
@@ -273,7 +289,8 @@ same supervised resources/timeout, never merely a smaller watched source set.
   to fit. Preserve terminal/wait4/EOF/process identity/no-survivor/source/resource
   gates. Any budget/cache/ownership/source failure stops the schedule for review.
 - [ ] Review exact source and plan independently, checkpoint all closed inputs,
-  then record a new explicit root command release. Do not execute full corpus
+  then record a SECOND explicit root release for the compilation schedule.
+  Do not compile full corpus
   merely because this prose plan or the private tiny result exists.
 - [ ] Checkpoint the reviewed exact full schedule and private preparation/release.
 
@@ -291,8 +308,8 @@ Manifest parsing/auditing uses structured schema identities and complete hashes.
   18,084 required nodes; independently cross-check all 14 recursive source member
   sets with typed traversal and invalid-leaf controls. Recompute the emitted Go
   component graph; do not copy the earlier 1,069-component expectation.
-- [ ] Run the two reviewed partitioned generations through the explicit CLI and
-  compare all relative output bytes/hashes and partition manifests. Reconcile
+- [ ] Consume the P4 generation-only A/B outcomes without silently regenerating
+  or modifying them; compare all output bytes/hashes and partition manifests. Reconcile
   source hashes, exactly-once declarations, every alias/object/constant target,
   file budgets and dependency/import closure; no facade/self/live import cycle.
 - [ ] Execute both independent modules through the released finite normal and
@@ -346,5 +363,5 @@ complete graph/14 recursive groups/seven semantic groups/twice-clean outputs=P5;
 manifest installation and final foundation gates=P6. Each Review Focus item
 has an owning task. Names/signatures and source ownership are explicit above.
 
-Plan is drafted for the already-selected subagent-driven method. No task is
-marked complete and no new Go execution is released by writing this plan.
+Plan is reviewed and adopted for the already-selected subagent-driven method.
+No task is marked complete and no new Go execution is released by this plan.

@@ -1,6 +1,6 @@
 # Partitioned Go model generation
 
-Status: design draft; implementation and complete-corpus acceptance are pending.
+Status: accepted design; implementation and complete-corpus acceptance are pending.
 This continues Task 6 of the approved full backend migration. The schema/model
 reconstruction specification remains binding except for the explicit presence
 location and opt-in model representation amendments below.
