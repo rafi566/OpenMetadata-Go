@@ -368,8 +368,8 @@ the exact old templates. `documentComponents(edges []typedEdge,nodes []Node)
 
 ### Task P3: Complete opt-in output and ordinary embedding
 
-**Proposed argv correction:** independently review/adopt
-`../specs/2026-11-07-go-partitioned-alias-aggregation-design.md` before P3 code.
+**Adopted argv correction:** follow the independently reviewed
+`../specs/2026-11-07-go-partitioned-alias-aggregation-design.md` for P3 code.
 The previous per-node physical facade layout exceeds64KiB encoded argv even
 without absolute paths/options. P0B1 remains independent of this amendment.
 
@@ -469,11 +469,15 @@ same supervised resources/timeout, never merely a smaller watched source set.
   standard library, vet, cgo and test variants; smaller batches need a closed
   reviewed plan, never automatic retry. Keep each unchanged controller's total
   256 owned identities/128 compiler captures and every raw output/telemetry cap.
-- [ ] Preflight full exact compiler argv JSON<=65536 with selected tool paths,
-  all generated/support filenames, flags, import/embed configs, test variants
-  and released temporary path bounds. Check before launch; retain actual
-  recorder enforcement and reject response files. Chunk/package counts alone
-  are not argument proofs. No cap raise or source omission on failure.
+- [ ] Before each Go DRIVER launch, prove a conservative complete compact-JSON
+  compiler-argv upper bound<=65536 for every permitted action/test variant:
+  selected tool paths, every generated/support/runtime filename, flags,
+  import/embed configs, dynamic temporary-path byte bounds and JSON escaping.
+  Bind the calculation to selected SDK construction rules; missing/unbounded
+  cases reject the release. Do not invent exact randomized work paths or run
+  an SDK dry run. Immediately before EACH COMPILER exec, retain the recorder's
+  actual exact argv/pin/budget check and response-file refusal. Chunk/package
+  counts alone are not argument proofs. No cap raise or source omission.
 - [ ] Use `-p=1` and explicit all-package compiler `-c=1` flags, with independently
   recorded effective command coverage including nested fixture Go children.
   Warm normal/race dependency closures separately using normal caches; no cache

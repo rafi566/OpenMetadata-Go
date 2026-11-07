@@ -1,6 +1,7 @@
 # Partitioned facade alias aggregation
 
-Status: proposed internal P3 correction; no implementation or Go release.
+Status: adopted internal P3 correction after independent design review;
+no implementation or Go release.
 The full-migration scope, wire/model behavior and legacy generator contract stay
 binding. Root selects this technical correction under the existing execution
 authorization; it is not a new user-approved product requirement.
@@ -58,11 +59,17 @@ remains; aggregation changes physical target values, without adding schema keys.
 During generation preflight, compute compact JSON bytes of all unavoidable
 absolute generated facade Go filenames and known hand-owned support filenames.
 If that lower bound alone exceeds65,536, reject before writing. Passing a lower
-bound is not proof of the full invocation. P4 separately freezes exact selected
-SDK paths/options/cwd, test variants and temporary paths, verifies the complete
-released argv against65,536 before launch, then retains the recorder's actual
-enforcement. No new GeneratePartitionedOptions field or inferred SDK command is
-introduced. An impossible exact release remains a typed blocker, not permission
+bound is not proof of the full invocation. Before launching a Go DRIVER, P4
+freezes selected SDK paths/options/cwd and proves a conservative complete
+compact-JSON argv upper bound<=65,536 for every permitted compiler/test variant.
+Use pinned SDK construction rules, every possible argument/source file, released
+runtime temporary-path byte bounds and JSON escaping costs. Randomized work and
+test-main paths are bounded, not falsely described as exact preexisting strings.
+Missing or unbounded variants reject the release. Immediately before EACH
+COMPILER exec, the recorder authenticates and checks its actual exact argv
+against65,536. No SDK dry run or response-file exception is introduced. No new
+GeneratePartitionedOptions field or inferred SDK command is introduced.
+An impossible bounded release remains a typed blocker, not permission
 to increase a cap or discard nodes. Full-corpus generation and compilation remain
 separate releases.
 
