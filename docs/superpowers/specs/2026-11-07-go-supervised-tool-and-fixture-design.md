@@ -1,6 +1,7 @@
 # Supervised host tool identity and generated test fixtures
 
-Status: proposed P0 composition amendment; no execution release. The v1 source
+Status: adopted P0 composition design; precise wire/plan independently reviewed.
+No Go execution release. The v1 source
 helpers remain a separate reviewed unit. This document closes two prerequisites
 found while tracing the selected Go SDK and the actual test helper. It changes
 development verification only, without changing model/wire semantics or the

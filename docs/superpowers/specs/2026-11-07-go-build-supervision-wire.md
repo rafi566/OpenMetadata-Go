@@ -1,7 +1,8 @@
 # Build supervision wire contract
 
-Status: precise P0B candidate for independent review. Implements the supervised
-tool/fixture design; no Go execution authority. The accepted v1 helper unit is
+Status: design adopted after scoped integration/SDK review and two corrections.
+Implements the supervised tool/fixture design; no Go execution authority.
+The accepted v1 helper unit is
 unchanged until the separately reviewed implementation tasks below land.
 
 ## Shared admission and authority
@@ -27,23 +28,53 @@ Release authorization is supplied by the root controller, not inferred from an
 untrusted helper request or a JSON boolean alone.
 
 Config<=256KiB has exactly `format,job_id,module_root,input_manifest,sdk_go,
-tool_policy,toolexec_argv,environment,roots,root_driver,fixture_slots,caps`.
+tool_policy,toolexec_argv,environment,roots,root_driver,fixture_slots,coverage,caps`.
 Format=`om-build-job-v1`; input_manifest/sdk_go/tool_policy are Pins.
 module_root is canonical absolute. toolexec_argv is the exact approved Python
 `-B`, recorder path, policy path and external policy SHA, <=32 strings/16KiB.
 environment is the complete approved map<=64 entries/64KiB, including flags,
 offline settings, normal SDK/cache settings, GODEBUG=gocachehash=1, launcher and
-retention values. Child environment is constructed from it. Only SDK's documented
-LC_ALL=C override and immutable per-driver context values are added at callbacks.
+retention values. Driver environment is constructed from it with PWD set to that
+registered driver's cwd and its immutable context variables. Callback environment
+is bounded as a map<=128 entries/128KiB, not equal to that launch map. Verified
+selected SDK parent may add its source-defined action environment, cwd-derived
+PWD and TOOLEXEC_IMPORTPATH=p.Desc(), and LC_ALL=C for host identity probes.
+Preserve those additions unchanged. GOFLAGS/GODEBUG/CC/CXX/PKG_CONFIG/SDK/cache/
+offline values and every OM_* control value remain exact released values;
+immutable context values are the only per-driver override. Reject any protected
+override. Check actual callback cwd/PWD is canonical and within the registered
+driver's input root, SDK src, released GOMODCACHE or released GOTMPDIR/TMPDIR
+descendants; all roots are canonical and explicitly present in approved config
+environment. Bind importpath as bounded actual SDK description. Empty
+importpath is admitted for SDK/host version probes only. Callback parent must
+still be actual registered Go PID/start with executable matching sdk_go.
 
 roots has exactly `fixtures,records,drivers,registrations`: fresh0700 siblings
 outside every source root. Config/launcher remain outside outputs. Controls
 live under registrations; fixture contents become inputs at freeze.
 root_driver has exactly `driver_id,argv`; cwd=module_root and argv are released
-Go arguments including -v. fixture_slots<=32 have exactly `driver_id,test_name,
+Go arguments, including -v for test commands. fixture_slots<=32 have exactly `driver_id,test_name,
 package,support_paths`; unique IDs distinct from root, test_name<=512B, package
 is a Go identifier, support_paths are exact relative copied files. Every
 released slot must complete once. No discovery can create additional slots.
+
+coverage is a sorted array of exactly one `{driver_id,plan}` per root/fixture
+slot, plan a Pin<=256KiB. Plan has exactly `format,driver_id,argv,
+required_packages,action_descriptions,zero_build_diagnostic`, format=
+om-build-coverage-v1. argv equals registered SDK arguments; required_packages
+is sorted unique<=30000 exact ImportPath strings. action_descriptions is sorted
+unique<=30000 `{description,import_path}` rows from released source/action
+inventory: description is exact SDK p.Desc(), import_path exact p.ImportPath.
+Normal packages have equal values; test/main variants follow selected load/pkg.go
+Desc rules and are explicitly represented. No equality between bracketed
+description and hash label is assumed. zero_build_diagnostic=true permits only
+explicit `version` argv with no package/action/host expectations, never
+test/build/generate; false requires complete build/package coverage. Engine
+authenticates plans before exec and binds driver/argv; no request override,
+observed-output inference or cross-driver substitution. Reconciliation receipt
+is exactly `{format,job_id,driver_id,coverage_sha256,build_blocks,
+covered_packages,host_completions,pass}`, format=om-build-coverage-result-v1;
+counts nonnegative, covered_packages sorted unique, pass boolean.
 
 caps has exactly these values: raw_bytes33554432, segment_bytes4194304,
 response_bytes4096, request_bytes16777216, pre_seconds10, run_seconds60,
@@ -70,7 +101,8 @@ config/start/policy are Pins. It is parent-written before gate acknowledgement.
 Every v2 callback verifies context/config/start/policy bytes and recorder's
 actual PPID/start against registered go_identity. No caller-supplied PID can
 replace attribution. Derived per-driver variables are the only environment
-additions; helper requests cannot choose a command, SDK, policy or context.
+control additions; SDK callback additions follow the bounded rule above.
+Helper requests cannot choose a command, SDK, policy, coverage or context.
 
 ## Fixture control and membership
 
@@ -101,9 +133,16 @@ root={path,dev,ino}, dev/ino nonnegative integers, pre_pass=true. It binds
 verified original root identity and exact expected paths, not discovered files.
 policy is a Pin. Derive its v2 bytes from config.tool_policy by changing ONLY
 working_directory to this registered fixture root. All other fields, including
-the shared job record_directory, remain byte-equivalent values. Root uses the
+the shared job record_directory, remain equivalent JSON values. Canonical derived
+bytes are sorted-key compact ensure_ascii=false UTF-8 JSON plus one LF. Root uses the
 original policy. Validate this derivation against pinned config at every callback;
 context.policy is that driver's resulting Pin. No caller chooses policy fields.
+The unchanged toolexec argv path/SHA always authenticates the ROOT TEMPLATE,
+matching config.tool_policy. V2 then separately authenticates effective
+context.policy and proves the exact derivation, using effective SHA/cwd for
+admission and events. Root effective policy is identical to template. V1 still
+authenticates argv policy directly and retains its previous behavior. GOFLAGS
+is never rewritten to substitute a fixture-specific policy token.
 
 Run request: exactly `{format,job_id,driver_id}`, format=om-fixture-run-v1.
 Consume FROZEN once, recheck manifest, run exact sdk_go arguments
@@ -197,14 +236,27 @@ Forward original bytes and actual terminal; never fabricate previous ID results.
 
 Use each registered driver's original stderr, before test-log decoration.
 Require direct terminal/EOF/bytes/hashes/loss proof. Parse incrementally with
-<=64KiB buffers,1MiB encoded HASH line,512KiB decoded input,30000 named hash
-blocks/job,256 simultaneously active. Bound every length before allocation.
+<=64KiB buffers,1MiB encoded HASH line,512KiB decoded input,30000 cumulative
+named HASH headers/job across BOTH build and ancillary families,256 simultaneously
+active build blocks. Charge every named header before admission using a shared
+job counter that passes through all parsers and is never reset per driver.
+Build coverage counts are separate and cannot waive that cap. Bound every length
+before allocation; all ancillary observations also remain within raw32MiB.
 Selected SDK forms: HASH[name] header, HASH[name]: Go-quoted payload, HASH[name]:
-64-lowercase-hex final digest. Names include bracketed test variants. Repeated
-names use sequential ordinals; overlapping same names reject. Recompute SHA256
-over decoded Write payloads including initial salt; match final Sum. Missing
-header/input/end or malformed HASH framing rejects. FileHash/subkey diagnostics
-are retained separate forms and cannot prove action input.
+64-lowercase-hex digest. For `build <p.ImportPath>` ONLY, use complete
+header/input/final lifecycle, sequential occurrence ordinals and no overlapping
+same-name build blocks. Recompute SHA256 over decoded Write payloads including
+initial salt; match final Sum. Missing build header/input/end, malformed build
+framing or ambiguous build attribution rejects. Bind recorder descriptions
+through released action_descriptions, never invent test suffixes on hash names.
+Selected ancillary names are moduleIndex, gccCompilerID, covermeta, testResult,
+testInputs, getenv, open, stat, linkShared, testmain and prefixes `vet `,
+`link `, `preprocess PGO profile `. Retain individually bounded header/quoted/
+digest diagnostic frames, without assigning ambiguous lifecycles or discharging
+coverage. moduleIndex may interleave same names or omit Sum; gccCompilerID may
+Sum, append more input and Sum again. Those are valid ancillary observations.
+Unknown HASH family or malformed framing rejects. FileHash/subkey diagnostics
+are retained separate source-defined forms and cannot prove action input.
 
 Go %q is bytes, not JSON: accept double-quoted valid UTF-8 literals and only
 backslash, quote, a/b/f/n/r/t/v, xHH, uHHHH, UHHHHHHHH escapes. x emits one byte;

@@ -164,6 +164,8 @@ The public loader never trusts a caller-selected PID. Existing recorder
 - [ ] Write importable initial APIs and meaningful behavior RED. Test names:
   `test_v1_is_unchanged`, `test_host_requires_exact_role_argv_and_root_pin`,
   `test_context_rejects_wrong_parent_or_derived_policy`,
+  `test_template_token_and_derived_policy_dispatch`,
+  `test_sdk_callback_pwd_test_description_and_protected_override`,
   `test_start_is_durable_before_child_and_completion_is_reserved`,
   `test_host_forwards_original_stderr_and_status`,
   `test_nonzero_unparseable_and_nonempty_stdout_fail`,
@@ -191,17 +193,22 @@ The public loader never trusts a caller-selected PID. Existing recorder
 `scripts/test_build_hash_trace.py`.
 
 **Interfaces:** `decode_go_quote(raw: bytes, limit: int) -> bytes`;
-`parse_hash_trace(chunks: Iterable[bytes]) -> list[dict]` produces verified
-named hash blocks with ordinal/decoded inputs/final digest;
+`parse_hash_trace(chunks: Iterable[bytes], job_budget: dict) -> list[dict]` produces
+verified build-action blocks with ordinal/decoded inputs/final digest, retaining
+known ancillary observations without assigning invented complete lifecycles;
 `reconcile_driver(context: dict, terminal: dict, events: list[dict],
 blocks: list[dict], coverage: dict) -> dict` returns compact coverage receipt.
-Consumes P0B1 exact envelopes and wire contract. coverage is released data with
-exact `format,driver_id,argv,required_packages,zero_build_diagnostic` keys,
-format=om-build-coverage-v1, argv equals registered args, sorted unique exact
-required_packages<=30000, zero_build_diagnostic boolean. True admits only an
-explicit released diagnostic such as `version`, never test/build/generate;
-false requires at least one complete build block and every required package.
-No missing trace can implicitly select diagnostic mode.
+Consumes P0B1 exact envelopes and wire contract. coverage comes from this driver's
+authenticated config.coverage plan Pin with the exact six-key schema in the wire;
+engine validates it before exec. Released action_descriptions map p.Desc() to
+p.ImportPath instead of equating test variants with build labels. job_budget
+is one engine-owned dictionary with exactly
+`named_hash_headers,build_blocks,active_build_blocks`, nonnegative counts shared
+across all drivers under one lock/aggregation owner. Every named header, including
+ancillary, consumes the cumulative30000 cap before admission; active build cap256
+and build coverage counts are separate. Counters never reset per driver.
+No missing trace can select diagnostic
+mode. Receipt uses exact om-build-coverage-result-v1 wire schema.
 
 - [ ] Add meaningful RED for `test_quote_bytes_and_unicode_are_not_json`,
   `test_hash_salt_input_end_digest_and_interleaving`,
@@ -209,10 +216,15 @@ No missing trace can implicitly select diagnostic mode.
   `test_sdk_shaped_swallowed_error_rejects_even_parent_exit_zero`,
   `test_failure_before_journal_registration_is_seen_in_trace`,
   `test_cached_id_reuse_is_same_driver_only`,
-  `test_zero_build_requires_explicit_nonsemantic_coverage`.
+  `test_zero_build_requires_explicit_nonsemantic_coverage`,
+  `test_ancillary_moduleindex_interleaving_and_gcc_double_sum`,
+  `test_test_description_mapping_and_shared_job_block_budget`.
+  Exact30000/30001 named-header boundary cases include ancillary-only and mixed
+  root/nested driver streams; ancillary storage cannot invent lifecycle indices.
   Expected positive hash fixtures use manually constructed byte strings and
-  hashlib rather than copied implementation parsing. Negative quoted forms
-  include actual\\a/\\v/\\xFF, Unicode scalar/surrogate and trailing-token edges.
+  hashlib rather than copied implementation parsing. Positive quoted forms
+  include actual\\a/\\v/\\xFF and valid Unicode scalars; negative forms include
+  unknown\\q, surrogates, incomplete escapes and trailing tokens.
 - [ ] Under activated venv run
   `python -B -m unittest discover -s scripts -p 'test_build_hash_trace.py'`;
   record assertion RED, implement byte decoder and incremental bounded parser,
@@ -244,6 +256,8 @@ Use P0 source guard, P0B1 contexts/events and P0B2 reconciliation.
 
 - [ ] Add importable APIs then actual RED for fixture extra/missing/tamper
   before/after run, policy derivation, replay, forged/stale PID and lost gate.
+  Coverage tests reject missing/extra driver Pins, cross-driver substitution,
+  observed-only expectations and diagnostic permission for test/build.
   Test fake child exec confirms PID/start equals parent-created registry and
   preexec_fn deadlock is absent; never selected Go.
 - [ ] Add output tests with two concurrent toy drivers exceeding the shared
