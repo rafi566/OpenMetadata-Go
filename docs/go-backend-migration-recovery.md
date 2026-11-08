@@ -39,19 +39,26 @@ reports and all new failed/corrected evidence. An independent fresh restore
 verified all file bytes, hashes and modes; proof SHA256 is
 `386c56a345deedb931a68befd589391e86b4655da76c178633b506fca6a9d271`.
 The latest verified private preparation checkpoint, observed on 2026-11-08 at
-02:17:19 UTC, has SHA256
-`e7ab38b63c5d9bdf86c5afc725b01bde5d1c2fec0c5dc3db9dbc495b5f299a70`:
-169 files / 3,408,417 logical bytes / five Page SOURCE parts. External readback
-and a fresh restore verified all file bytes, hashes and modes; proof SHA256 is
-`6f99207464e1f7f8076ce01a36a6ea080ea7ec303fb9200c51c1bd3abc50c108`.
-It preserves the four-case private SDK preparation before its independent
-review found a compiler-concurrency admission bug. That source unit is not
-accepted; its correction and refreshed controls require scoped review and a
-later verified checkpoint. It contains no authorized Go or native execution.
+06:42:29 UTC, has SHA256
+`dbc2dcb77c5866e707b5b3b9e60409e7503e9d966b372813ef76d85133381cf2`:
+203 files / 7,191,154 logical bytes. Two normal carrier archives preserve its
+eight original fragments across nine Page SOURCE blocks. Each carrier passed
+external readback and a fresh restore; independent composition then verified
+the complete parent archive and restored all 203 files. Composition proof
+SHA256 is `9bb5d84e16f881238ab6bfccf50810b6ed7336026bba1db9df92d1d9de2751c9`.
+An independent replay from the restored files, two exact metadata recipes and
+authenticated older inputs also reproduced the preceding 105-file archive,
+SHA256 `389bced74b67f93fbd65acfcf8f1113889453cb4196f1e471ca01f8286fbb8de`.
+The complete composition plan is on carrier A and its SHA256 is
+`eb5110cacd5be8dc4b776c58b4e9dba065c08cca908b1a2b372690238cdc330f`.
+The compiler-concurrency source correction is now accepted after independent
+review and 30 passing checks. The external controller remains WIP06: its last
+34 tests pass, but exceptional teardown, finalization deadlines and startup
+controls remain unfinished. None of this authorizes Go or native execution.
 
 Use the [main recovery Page](https://chatgpt.com/space/page_6880055acd3881919465f9c35c7d0f4d)
 for the newest private checkpoint and its complete dependency chain. The latest
-verified chain has 269 File SOURCE references and 82 Page SOURCE blocks; all
+verified chain has 269 File SOURCE references and 126 Page SOURCE blocks; all
 914 existing File references remain on the main Page. Private snapshots depend
 on their preserved code, metadata and older archives; a delta is not a replacement.
 Earlier duplicate uploads, failed reads and one upload with unknown outcome
@@ -72,8 +79,8 @@ restored byte-for-byte; preserve them instead of regenerating over them.
 
 The new plan starts with full-source and tool-invocation supervision. Its
 source guard and P0B1/P0B2/P0B3 source units are accepted. Continue the private
-P0B4A compiler-concurrency fix and independent review, then P0B4B external
-controller/source/resource integration. Exact finite SDK characterization needs
+P0B4B external controller/source/resource integration from the accepted P0B4A
+compiler-concurrency source unit. Exact finite SDK characterization needs
 a separate reviewed release and verified external restore before any Go starts.
 Shared presence, opt-in partitioned generation and full generation/compilation
 remain later gates. Follow the current ledger's next action and closed reviews,
