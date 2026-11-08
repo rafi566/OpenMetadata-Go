@@ -3,6 +3,12 @@
 package schema
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"strconv"
+	"sync"
+	"unicode/utf8"
 	"context"
 	"encoding/json"
 	"errors"
@@ -112,6 +118,7 @@ func TestGenerateNamesAndOutputSafety(t *testing.T) {
 
 func independentGeneratedModule(t *testing.T, documents map[string]string, pkg, testSource string) {
 	t.Helper()
+	control := configuredGeneratedControl(t)
 	moduleRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
@@ -151,6 +158,10 @@ func independentGeneratedModule(t *testing.T, documents map[string]string, pkg, 
 	}
 	if err = os.WriteFile(filepath.Join(out, "behavior_test.go"), []byte("package "+pkg+"\n"+testSource), 0600); err != nil {
 		t.Fatal(err)
+	}
+	if control != nil {
+		control.run(t, root, paths)
+		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -236,4 +247,212 @@ var a ModelArrayRootValue;if e:=a.UnmarshalJSON([]byte("[\"done\"]"));e!=nil{t.F
 var escaped ModelHashPercentRootValue;if e:=escaped.UnmarshalJSON([]byte("{\"key\":\"kept\"}"));e!=nil{t.Fatal(e)};view,ok,e:=escaped.Object();if e!=nil||!ok||!view.Key.IsSet(){t.Fatal("escaped physical identity",e)}
 }
 `)
+}
+
+// The unconfigured branch above deliberately keeps its original direct command.
+type generatedBuildControl struct { launcher, jobID string }
+type generatedBuildPin struct {
+	Path string `json:"path"`
+	Bytes int64 `json:"bytes"`
+	SHA256 string `json:"sha256"`
+	Mode int `json:"mode"`
+}
+type generatedBuildReply struct {
+	Format string `json:"format"`
+	JobID string `json:"job_id"`
+	DriverID string `json:"driver_id"`
+	Phase string `json:"phase"`
+	Status string `json:"status"`
+	Receipt *generatedBuildPin `json:"receipt"`
+	Error *string `json:"error"`
+}
+
+func generatedBuildID(value string) bool {
+	if len(value) < 1 || len(value) > 64 { return false }
+	for _, c := range value {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') { return false }
+	}
+	return true
+}
+func generatedBuildSHA(value string) bool {
+	if len(value) != 64 { return false }
+	for _, c := range value { if !(c >= 'a' && c <= 'f' || c >= '0' && c <= '9') { return false } }
+	return true
+}
+func generatedBuildPath(value string) bool {
+	if !utf8.ValidString(value) || !filepath.IsAbs(value) || filepath.Clean(value) != value || strings.ContainsAny(value, "\\\x00") { return false }
+	for _, part := range strings.Split(strings.TrimPrefix(value, "/"), "/") { if part == "" || len(part) > 240 { return false } }
+	return true
+}
+func configuredGeneratedControl(t *testing.T) *generatedBuildControl {
+	t.Helper()
+	launcher, hasLauncher := os.LookupEnv("OM_BUILD_LAUNCHER")
+	job, hasJob := os.LookupEnv("OM_BUILD_JOB_ID")
+	if !hasLauncher && !hasJob { return nil }
+	if !hasLauncher || !hasJob || !generatedBuildPath(launcher) || !generatedBuildID(job) ||
+		!generatedBuildPath(os.Getenv("OM_GENERATED_EVIDENCE_DIR")) ||
+		!generatedBuildPath(os.Getenv("OM_GO_SUPERVISION_CONTEXT")) ||
+		!generatedBuildSHA(os.Getenv("OM_GO_SUPERVISION_CONTEXT_SHA256")) {
+		t.Fatal("invalid configured build supervision environment")
+	}
+	return &generatedBuildControl{launcher: launcher, jobID: job}
+}
+
+// Both copier goroutines share one bound; overflow cancels the actual launcher.
+type generatedControlOutput struct {
+	mu sync.Mutex
+	stdout, stderr bytes.Buffer
+	size int
+	overflow bool
+	cancel context.CancelFunc
+}
+type generatedControlWriter struct { output *generatedControlOutput; stderr bool }
+func (w generatedControlWriter) Write(p []byte) (int, error) {
+	w.output.mu.Lock()
+	n := len(p)
+	if n > 4096-w.output.size { n = 4096-w.output.size }
+	if w.stderr { _, _ = w.output.stderr.Write(p[:n]) } else { _, _ = w.output.stdout.Write(p[:n]) }
+	w.output.size += n
+	overflow := n != len(p)
+	if overflow { w.output.overflow = true }
+	w.output.mu.Unlock()
+	if overflow { w.output.cancel(); return n, io.ErrShortWrite }
+	return n, nil
+}
+
+// encoding/json otherwise replaces invalid UTF-8/unpaired escaped surrogates.
+func generatedStrictStrings(raw []byte) error {
+	if !utf8.Valid(raw) { return errors.New("invalid control UTF-8") }
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '"' { continue }
+		i++
+		for ; i < len(raw) && raw[i] != '"'; i++ {
+			if raw[i] != '\\' { continue }
+			i++
+			if i >= len(raw) { return errors.New("truncated control escape") }
+			if raw[i] != 'u' { continue }
+			if i+5 > len(raw) { return errors.New("truncated control Unicode escape") }
+			value, err := strconv.ParseUint(string(raw[i+1:i+5]), 16, 16)
+			if err != nil { return err }
+			if value >= 0xD800 && value <= 0xDBFF {
+				if i+11 > len(raw) || raw[i+5] != '\\' || raw[i+6] != 'u' { return errors.New("unpaired control surrogate") }
+				low, e := strconv.ParseUint(string(raw[i+7:i+11]), 16, 16)
+				if e != nil || low < 0xDC00 || low > 0xDFFF { return errors.New("invalid control surrogate pair") }
+				i += 10
+			} else {
+				if value >= 0xDC00 && value <= 0xDFFF { return errors.New("unpaired control surrogate") }
+				i += 4
+			}
+		}
+		if i >= len(raw) { return errors.New("truncated control string") }
+	}
+	return nil
+}
+func generatedStrictReply(raw []byte) (generatedBuildReply, error) {
+	var reply generatedBuildReply
+	if len(raw) > 4096 { return reply, errors.New("control response overflow") }
+	if err := generatedStrictStrings(raw); err != nil { return reply, err }
+	decoder := json.NewDecoder(bytes.NewReader(raw)); decoder.UseNumber()
+	var inspect func(int) error
+	inspect = func(depth int) error {
+		if depth > 16 { return errors.New("control response depth") }
+		token, err := decoder.Token(); if err != nil { return err }
+		if delim, ok := token.(json.Delim); ok {
+			if delim != '{' { return errors.New("unexpected control JSON container") }
+			seen := map[string]bool{}
+			for decoder.More() {
+				key, e := decoder.Token(); if e != nil { return e }
+				name, ok := key.(string); if !ok || seen[name] { return errors.New("duplicate control key") }
+				seen[name] = true
+				if len(seen) > 7 { return errors.New("control object bound") }
+				if err := inspect(depth+1); err != nil { return err }
+			}
+			end, e := decoder.Token(); if e != nil { return e }; if end != json.Delim('}') { return errors.New("control JSON close") }
+		}
+		return nil
+	}
+	if err := inspect(0); err != nil { return reply, err }
+	if _, err := decoder.Token(); err != io.EOF { return reply, errors.New("extra control JSON") }
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil || len(fields) != 7 { return reply, errors.New("control response fields") }
+	for _, key := range []string{"format", "job_id", "driver_id", "phase", "status", "receipt", "error"} {
+		if _, ok := fields[key]; !ok { return reply, errors.New("noncanonical control response key") }
+	}
+	decoder = json.NewDecoder(bytes.NewReader(raw)); decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&reply); err != nil { return reply, err }
+	if reply.Format != "om-driver-control-v1" || !generatedBuildID(reply.JobID) || !generatedBuildID(reply.DriverID) ||
+		(reply.Phase != "freeze" && reply.Phase != "run" && reply.Phase != "post") || (reply.Status != "PASS" && reply.Status != "FAIL") {
+		return reply, errors.New("control response values")
+	}
+	if reply.Error != nil && (len(*reply.Error) > 256 || strings.ContainsRune(*reply.Error, 0)) { return reply, errors.New("control diagnostic bound") }
+	if reply.Receipt != nil {
+		var pinFields map[string]json.RawMessage
+		if err := json.Unmarshal(fields["receipt"], &pinFields); err != nil || len(pinFields) != 4 { return reply, errors.New("control receipt fields") }
+		for _, key := range []string{"path", "bytes", "sha256", "mode"} {
+			if _, ok := pinFields[key]; !ok { return reply, errors.New("noncanonical control receipt key") }
+		}
+		if bytes.Equal(bytes.TrimSpace(pinFields["bytes"]), []byte("null")) || bytes.Equal(bytes.TrimSpace(pinFields["mode"]), []byte("null")) { return reply, errors.New("null control receipt number") }
+		p := reply.Receipt
+		if !generatedBuildPath(p.Path) || p.Bytes < 0 || p.Bytes > 16777216 || !generatedBuildSHA(p.SHA256) || p.Mode != 0600 { return reply, errors.New("control receipt values") }
+	}
+	if reply.Status != "PASS" || reply.Error != nil || reply.Receipt == nil { return reply, errors.New("control phase refused") }
+	return reply, nil
+}
+func (c *generatedBuildControl) call(parent context.Context, mode, driver string, request any) (generatedBuildReply, error) {
+	var reply generatedBuildReply
+	raw, err := json.Marshal(request)
+	if err != nil || len(raw) > 16777216 { return reply, errors.New("control request bound") }
+	ctx, cancel := context.WithCancel(parent); defer cancel()
+	output := &generatedControlOutput{cancel: cancel}
+	cmd := exec.CommandContext(ctx, c.launcher, mode)
+	cmd.Stdin = bytes.NewReader(raw)
+	cmd.Stdout = generatedControlWriter{output: output}
+	cmd.Stderr = generatedControlWriter{output: output, stderr: true}
+	cmd.WaitDelay = time.Second
+	err = cmd.Run()
+	output.mu.Lock()
+	stdout := append([]byte(nil), output.stdout.Bytes()...)
+	stderr := append([]byte(nil), output.stderr.Bytes()...)
+	overflow := output.overflow
+	output.mu.Unlock()
+	if err != nil || overflow { return reply, fmt.Errorf("control %s failed: %v (stdout=%q stderr=%q)", mode, err, stdout, stderr) }
+	reply, err = generatedStrictReply(stdout)
+	if err != nil { return reply, err }
+	if reply.JobID != c.jobID || reply.Phase != mode || (driver != "" && reply.DriverID != driver) { return reply, errors.New("control response binding") }
+	return reply, nil
+}
+func (c *generatedBuildControl) run(t *testing.T, root string, paths []string) {
+	t.Helper()
+	pre, preCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	freeze, err := c.call(pre, "freeze", "", map[string]any{"format":"om-fixture-freeze-v1", "job_id":c.jobID,
+		"test_name":t.Name(), "root":root, "generated_paths":paths})
+	preCancel()
+	if err != nil { t.Fatalf("independent fixture freeze: %v", err) }
+	run, runCancel := context.WithTimeout(context.Background(), time.Minute)
+	_, runErr := c.call(run, "run", freeze.DriverID, map[string]any{"format":"om-fixture-run-v1", "job_id":c.jobID, "driver_id":freeze.DriverID})
+	runCancel()
+	post, postCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	_, postErr := c.call(post, "post", freeze.DriverID, map[string]any{"format":"om-fixture-post-v1", "job_id":c.jobID, "driver_id":freeze.DriverID})
+	postCancel()
+	if runErr != nil { t.Fatalf("independent fixture run: %v (post=%v)", runErr, postErr) }
+	if postErr != nil { t.Fatalf("independent fixture post: %v", postErr) }
+}
+
+// These source-controlled cases run only in the separately released Go checks.
+func TestGeneratedBuildControlReplyContract(t *testing.T) {
+	good := `{"format":"om-driver-control-v1","job_id":"job","driver_id":"fix","phase":"post","status":"PASS","receipt":{"path":"/tmp/receipt.json","bytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","mode":384},"error":null}`
+	if _, err := generatedStrictReply([]byte(good)); err != nil { t.Fatal(err) }
+	bad := map[string]string{
+		"format-case": strings.Replace(good, `"format":`, `"Format":`, 1),
+		"status-case": strings.Replace(good, `"status":`, `"STATUS":`, 1),
+		"bytes-case": strings.Replace(good, `"bytes":`, `"Bytes":`, 1),
+		"null-bytes": strings.Replace(good, `"bytes":0`, `"bytes":null`, 1),
+		"null-mode": strings.Replace(good, `"mode":384`, `"mode":null`, 1),
+		"duplicate": strings.Replace(good, `"format":`, `"format":"om-driver-control-v1","format":`, 1),
+		"trailing": good+`{}`,
+		"unpaired-surrogate": strings.Replace(good, `/tmp/receipt.json`, `/tmp/\ud800`, 1),
+	}
+	for name, raw := range bad { t.Run(name, func(t *testing.T) { if _, err := generatedStrictReply([]byte(raw)); err == nil { t.Fatal("invalid control reply accepted") } }) }
+	paired := strings.Replace(good, `/tmp/receipt.json`, `/tmp/\ud800\udc00`, 1)
+	if _, err := generatedStrictReply([]byte(paired)); err != nil { t.Fatal(err) }
 }
