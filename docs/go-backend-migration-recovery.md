@@ -16,17 +16,15 @@ matches the original commit above. The public `go/full-backend-source-backup` br
 
 Current public source work continues on `go/partitioned-model-generation`.
 The latest reviewed source checkpoint is commit
-`483e1c4f4b6926e600c8ee68aaeece465070d9fe`; its normal push and exact remote head
-were verified. The four source/tool helper scripts were accepted at
-`6ffd32aabbdcaa6682cfb26db25a37bcbd25ed39` after31 Python checks and independent
-review. P0B1 event/host supervision is accepted at
-`caa673583f87fd2bc515f8365d8136c63b89b2fc` after independent review and affected
-checks. P0B2 trace parsing/reconciliation is accepted at the latest checkpoint
-after 26 Python checks and clean final independent review. P0B3 shared capture
-and fixture integration is being implemented. These source units grant no new
-Go execution authority. This branch
-retains the recovered original product history. Read its latest reviewed
-commits and the private ledger before choosing a resume point.
+`a7daaf2c6d5f81acc059a3c793f27dd6f083c6b4`; its normal push and exact remote head
+were verified. P0B1 event/host supervision and P0B2 trace reconciliation remain
+accepted. P0B3 shared driver capture and fixture lifecycle is now accepted after
+independent review and fixes for FIFO admission, cleanup on persistence failure,
+and a single cleanup deadline. Its affected Python suites passed 127 and 32
+checks. The added Go fixture helper has not been compiled or executed. These
+source units grant no new Go execution authority. This branch retains the
+recovered original product history; read its latest reviewed commits and the
+private ledger before choosing a resume point.
 
 The latest verified complete private execution archive has SHA256
 `776df04664b505741cdcc17ced6ebeccfedc362a701ed6d546221103b5806596`.
@@ -34,23 +32,34 @@ Its 593 logical files include all new raw execution, parent logs and independent
 reviews; all eleven native SOURCE parts were read back and a fresh restore
 verified. Accepted source/helper evidence is preserved in checkpoint
 `33476c2db881dcce7182c7f740f9a09eae1f80e25fa0c295d828d794446df654`:
-91 files/four SOURCE parts. The latest verified private source delta is
+91 files/four SOURCE parts. An earlier reviewed B2 source delta is
 `b0e4fd0add7992970d37a8e9c0fd57bc85ab139ae3b25ec3538912223523bcee`:
 64 files/four Page SOURCE parts, including final reviewed B2 source, tests,
 reports and all new failed/corrected evidence. An independent fresh restore
 verified all file bytes, hashes and modes; proof SHA256 is
 `386c56a345deedb931a68befd589391e86b4655da76c178633b506fca6a9d271`.
-Earlier duplicate uploads and one upload with unknown outcome are preserved
-with their actual receipts; uncertain writes are never blindly repeated.
-Private Page SOURCE blocks now carry new archives after the File upload path
-returned an unknown outcome. These are typed Page/block identities. The chain
-has 269 File SOURCE references and 14 Page SOURCE blocks; all 914 existing
-references on the main recovery Page remain. Its latest readback was observed
-at 19:59:46 UTC on 2026-11-07; provider updated_at is not the checkpoint clock.
-An extra terminal newline in local saved copies was detected and corrected
-from actual SOURCE readbacks before verification; the erroneous copies and
-exact diagnosis remain preserved. These snapshots depend on the
-preserved code, metadata and older archive chain; a delta is not a replacement.
+The latest verified private preparation checkpoint, observed on 2026-11-08 at
+02:17:19 UTC, has SHA256
+`e7ab38b63c5d9bdf86c5afc725b01bde5d1c2fec0c5dc3db9dbc495b5f299a70`:
+169 files / 3,408,417 logical bytes / five Page SOURCE parts. External readback
+and a fresh restore verified all file bytes, hashes and modes; proof SHA256 is
+`6f99207464e1f7f8076ce01a36a6ea080ea7ec303fb9200c51c1bd3abc50c108`.
+It preserves the four-case private SDK preparation before its independent
+review found a compiler-concurrency admission bug. That source unit is not
+accepted; its correction and refreshed controls require scoped review and a
+later verified checkpoint. It contains no authorized Go or native execution.
+
+Use the [main recovery Page](https://chatgpt.com/space/page_6880055acd3881919465f9c35c7d0f4d)
+for the newest private checkpoint and its complete dependency chain. The latest
+verified chain has 269 File SOURCE references and 82 Page SOURCE blocks; all
+914 existing File references remain on the main Page. Private snapshots depend
+on their preserved code, metadata and older archives; a delta is not a replacement.
+Earlier duplicate uploads, failed reads and one upload with unknown outcome
+retain their actual receipts. Uncertain writes are never blindly repeated.
+Page SOURCE blocks carry new archives after the File upload path returned an
+unknown outcome. Extra newlines in old saved copies were corrected from actual
+SOURCE readbacks; failed copies and exact diagnoses remain preserved. A backup
+can preserve failing or unfinished work without accepting it.
 
 The repaired finite prototype passed 28 positive declarations and four exact
 negative conversion controls, with independent review. Only the small private
@@ -62,13 +71,13 @@ was not retroactively accepted. Both complete old generated modules were also
 restored byte-for-byte; preserve them instead of regenerating over them.
 
 The new plan starts with full-source and tool-invocation supervision. Its
-four-script helper unit and P0B1/P0B2 source units are accepted; the composed
-host/fixture supervisor is still incomplete. Continue P0B3 fixture/driver
-integration, then the separately released P0B4 SDK
-characterization before shared presence and the opt-in generator. Full generation and compilation
-need distinct reviewed releases. Follow the current ledger's next action and
-closed reviews, not an old checkpoint's historical pending label. Preserve all
-unfinished WIP as such; a backup is not acceptance.
+source guard and P0B1/P0B2/P0B3 source units are accepted. Continue the private
+P0B4A compiler-concurrency fix and independent review, then P0B4B external
+controller/source/resource integration. Exact finite SDK characterization needs
+a separate reviewed release and verified external restore before any Go starts.
+Shared presence, opt-in partitioned generation and full generation/compilation
+remain later gates. Follow the current ledger's next action and closed reviews,
+not an old snapshot's pending label. Preserve all unfinished WIP as such.
 
 Keep normal commits at reviewable source milestones and push them before long
 tests or an environment transition. Read back the remote head; a local commit
