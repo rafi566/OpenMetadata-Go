@@ -38,27 +38,38 @@ verified. Accepted source/helper evidence is preserved in checkpoint
 reports and all new failed/corrected evidence. An independent fresh restore
 verified all file bytes, hashes and modes; proof SHA256 is
 `386c56a345deedb931a68befd589391e86b4655da76c178633b506fca6a9d271`.
-The latest verified private preparation checkpoint, observed on 2026-11-08 at
-06:42:29 UTC, has SHA256
-`dbc2dcb77c5866e707b5b3b9e60409e7503e9d966b372813ef76d85133381cf2`:
-203 files / 7,191,154 logical bytes. Two normal carrier archives preserve its
-eight original fragments across nine Page SOURCE blocks. Each carrier passed
-external readback and a fresh restore; independent composition then verified
-the complete parent archive and restored all 203 files. Composition proof
-SHA256 is `9bb5d84e16f881238ab6bfccf50810b6ed7336026bba1db9df92d1d9de2751c9`.
-An independent replay from the restored files, two exact metadata recipes and
-authenticated older inputs also reproduced the preceding 105-file archive,
-SHA256 `389bced74b67f93fbd65acfcf8f1113889453cb4196f1e471ca01f8286fbb8de`.
-The complete composition plan is on carrier A and its SHA256 is
-`eb5110cacd5be8dc4b776c58b4e9dba065c08cca908b1a2b372690238cdc330f`.
+The current private recovery checkpoint, observed on 2026-11-08 at
+07:50:28 UTC, is snapshot commit
+`0926b329a061fff378df6851abb3d6e53c263345` on
+[codex/openmetadata-go-backups in the private herse repository](https://github.com/rafi566/herse/tree/codex/openmetadata-go-backups).
+That repository was empty and only the owner's collaborator access was present
+before the first backup push. The product repository remains OpenMetadata-Go.
+The snapshot contains 3,984 files / 135,908,852 logical bytes, including all
+1,388 current selected files and authenticated bases, retained historical source
+and evidence, and 47 checkpoint archives. A normal push, exact remote-head
+readback, independent remote clone and fresh restore verified all file bytes,
+modes and nine hardlink groups. MANIFEST.json SHA256 is
+`43f867cfa76092e153fe83a741aeb6ba1554587201e780e69b3211e2e8f512b6`;
+restore proof SHA256 is
+`1783d6878a39c223d3f6bb1fc0e758335f8a50192ee6fe00c5321d4132430c51`.
+Read RECOVERY.json on that branch first for newer continuation metadata.
+Toolchains, environments and caches are installed and checked separately;
+this is a named source/evidence snapshot, not a machine image.
+
+Earlier Page/File checkpoints and their dependencies remain preserved. They
+include the independently restored 203-file archive
+`dbc2dcb77c5866e707b5b3b9e60409e7503e9d966b372813ef76d85133381cf2`
+and exact reconstructed 105-file archive
+`389bced74b67f93fbd65acfcf8f1113889453cb4196f1e471ca01f8286fbb8de`.
 The compiler-concurrency source correction is now accepted after independent
-review and 30 passing checks. The external controller remains WIP06: its last
-34 tests pass, but exceptional teardown, finalization deadlines and startup
-controls remain unfinished. None of this authorizes Go or native execution.
+review and 30 passing checks. The external controller's latest 45 tests pass,
+but whole-core review found an adopted-child wait cleanup defect. The original
+author must correct it and the same reviewer must verify the correction.
+The controller remains unaccepted. None of this authorizes Go or native execution.
 
 Use the [main recovery Page](https://chatgpt.com/space/page_6880055acd3881919465f9c35c7d0f4d)
-for the newest private checkpoint and its complete dependency chain. The latest
-verified chain has 269 File SOURCE references and 126 Page SOURCE blocks; all
+for recovery links and the preserved dependency chain. The earlier verified
+chain has 269 File SOURCE references and 126 Page SOURCE blocks; all
 914 existing File references remain on the main Page. Private snapshots depend
 on their preserved code, metadata and older archives; a delta is not a replacement.
 Earlier duplicate uploads, failed reads and one upload with unknown outcome
@@ -90,8 +101,9 @@ Keep normal commits at reviewable source milestones and push them before long
 tests or an environment transition. Read back the remote head; a local commit
 alone is not an external backup. Do not force-push or overwrite older backups.
 
-Checkpoint private uncommitted work before long tests and at least every
-20 minutes while changing it; start preparation10 minutes after the previous
+Checkpoint private uncommitted work with normal private-branch commits, remote
+readback and a fresh clone restore before long tests and at least every
+20 minutes while changing it; start preparation 10 minutes after the previous
 verified checkpoint. Verify uploaded bytes and hashes, and perform a
 restore check before treating a checkpoint as recoverable. If that check fails,
 pause new changes until the backup is repaired. Preserve previous checkpoints
